@@ -1,10 +1,24 @@
-import { Text, View } from "react-native";
+import { Stack } from "expo-router";
+import { useColorScheme } from "react-native";
+import { AuthProvider } from "../context/AuthProvider";
 import "../global.css";
 
 export default function RootLayout() {
+  const colorScheme = useColorScheme();
+
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-4xl font-bold">Hello</Text>
-    </View>
+    <AuthProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+        initialRouteName="index"
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)/login" />
+        <Stack.Screen name="(auth)/signup" />
+        <Stack.Screen name="(protected)" />
+      </Stack>
+    </AuthProvider>
   );
 }
