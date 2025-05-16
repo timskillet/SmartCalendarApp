@@ -22,6 +22,12 @@ export default function TabLayout() {
           title: "Profile",
         }}
       />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Calendar",
+        }}
+      />
     </Tabs>
   );
 }
@@ -32,7 +38,7 @@ export function LogoutButton() {
       className="absolute top-12 right-4 bg-red-500 p-2 rounded-md"
       onPress={async () => {
         await supabase.auth.signOut();
-        router.replace("/auth/login");
+        router.replace("/(auth)/login");
       }}
     >
       <Text className="text-white font-bold">Logout</Text>

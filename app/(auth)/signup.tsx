@@ -5,7 +5,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import "../../global.css";
 import { supabase } from "../../lib/supabase";
 
-function SignupScreen() {
+export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);

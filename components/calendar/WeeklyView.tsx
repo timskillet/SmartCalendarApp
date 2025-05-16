@@ -9,7 +9,6 @@ import {
 
 import {
   addHours,
-  addMinutes,
   addWeeks,
   eachDayOfInterval,
   endOfWeek,
@@ -26,12 +25,26 @@ import {
   GestureDetector,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
-import {
+import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
+import { EventModal } from "./EventModal";
+
+export interface Event {
+  id: string;
+  title: string;
+  description?: string;
+  startTime: Date;
+  endTime: Date;
+  position: number;
+  color?: string;
+  isAllDay?: boolean;
+  location?: string;
+  attendees?: string[];
+}
 
 interface WeeklyViewProps {
   selectedDate: Date;
@@ -40,21 +53,53 @@ interface WeeklyViewProps {
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const HOUR_HEIGHT = 60;
-const MINUTES_IN_HOUR = 60;
 const SCROLL_THRESHOLD = 50;
+
+const calculateEventPosition = (startTime: Date, endTime: Date) => {
+  const startHour = startTime.getHours();
+  const startMinutes = startTime.getMinutes();
+  const endHour = endTime.getHours();
+  const endMinutes = endTime.getMinutes();
+
+  // Calculate position based on start time
+  const startPosition = (startHour + startMinutes / 60) * HOUR_HEIGHT;
+
+  // Calculate height based on duration
+  const durationHours = endHour - startHour + (endMinutes - startMinutes) / 60;
+  const height = durationHours * HOUR_HEIGHT;
+
+  return { top: startPosition, height };
+};
 
 export const WeeklyView: React.FC<WeeklyViewProps> = ({
   selectedDate,
   onSelectDate,
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate);
-  const [selected, setSelectedDay] = useState<string>("");
-  const [isDragging, setIsDragging] = useState(false);
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+
+  /* EVENT CREATION*/
+  const [events, setEvents] = useState<Event[]>([]);
+  const [snappedPosition, setSnappedPosition] = useState(0);
+  const [isEventModalVisible, setIsEventModalVisible] = useState(false);
+  const [draggableBoxTime, setDraggableBoxTime] = useState(""); // Event time displayed in event box
+  const [eventStartTime, setEventStartTime] = useState<Date>(new Date()); // event start time used for EventModal component
+
+  // Measure grid position
+  useEffect(() => {
+    const measureLayout = () => {
+      gridRef.current?.measureInWindow((x, y, width, height) => {
+        setGridOffset({ x, y });
+      });
+    };
+
+    const timer = setTimeout(measureLayout, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollY = useSharedValue(0);
-
   const translateY = useSharedValue(0);
-  const dragStartTime = useSharedValue("");
 
   // Add refs to measure header components
   const headerRef = useRef<View>(null);
@@ -79,27 +124,10 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     scrollY.value = event.nativeEvent.contentOffset.y;
   };
 
-  useEffect(() => {
-    const measureLayout = () => {
-      gridRef.current?.measureInWindow((x, y, width, height) => {
-        setGridOffset({ x, y });
-      });
-    };
-
-    const timer = setTimeout(measureLayout, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleLongPress = (event: any) => {
-    const boxHeight = HOUR_HEIGHT / 2;
-    const relativeY =
-      event.absoluteY - gridOffset.y + scrollY.value - boxHeight / 2;
-  };
-
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onEnd((event) => {
-      if (event.translationX > -50) {
+      if (event.translationX < -50) {
         setCurrentWeek(addWeeks(currentWeek, 1));
       } else if (event.translationX > 50) {
         setCurrentWeek(subWeeks(currentWeek, 1));
@@ -108,12 +136,10 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     .runOnJS(true);
 
   const longPressGesture = Gesture.LongPress()
-    .minDuration(200)
+    .minDuration(400)
     .onStart((event) => {
-      // Calculate position relative to grid, accounting for box height
-      const boxHeight = HOUR_HEIGHT / 2;
-      const relativeY =
-        event.absoluteY - gridOffset.y + scrollY.value - boxHeight / 2;
+      setIsCreatingEvent(true);
+      const relativeY = event.absoluteY - gridOffset.y + scrollY.value;
       const hour = Math.floor(
         (event.absoluteY - gridOffset.y + scrollY.value) / HOUR_HEIGHT
       );
@@ -124,23 +150,36 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
         // Position box centered on touch point
         const snapIncrement = HOUR_HEIGHT / 4;
         const snappedY = Math.round(relativeY / snapIncrement) * snapIncrement;
+        setSnappedPosition(snappedY);
         translateY.value = snappedY;
 
-        dragStartTime.value = format(
-          addHours(startOfDay(selectedDate), hour),
-          "HH:mm"
+        // Update time while dragging
+        const hour = Math.floor(snappedY / HOUR_HEIGHT);
+        const minutes =
+          Math.round((snappedY % HOUR_HEIGHT) / snapIncrement) * 15;
+        const selectedTime = new Date(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+          hour,
+          minutes
         );
-        runOnJS(setIsDragging)(true);
+        setDraggableBoxTime(format(selectedTime, "HH:mm"));
+        setEventStartTime(selectedTime);
+      }
+    })
+    .onTouchesUp(() => {
+      const hour = Math.floor(snappedPosition / HOUR_HEIGHT);
+      if (hour >= 0 && hour < 24) {
+        setIsEventModalVisible(true);
+        setIsCreatingEvent(false);
       }
     })
     .runOnJS(true);
 
   const dragGesture = Gesture.Pan()
     .onUpdate((event) => {
-      // Calculate position relative to grid, accounting for box height
-      const boxHeight = HOUR_HEIGHT / 2;
-      const relativeY =
-        event.absoluteY - gridOffset.y + scrollY.value - boxHeight / 2;
+      const relativeY = event.absoluteY - gridOffset.y + scrollY.value;
       const snapIncrement = HOUR_HEIGHT / 4;
       const snappedY = Math.round(relativeY / snapIncrement) * snapIncrement;
       translateY.value = snappedY;
@@ -163,36 +202,75 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
           });
         }
       }
-    })
-    .onEnd((event) => {
-      const relativeY = event.absoluteY - gridOffset.y + scrollY.value;
-      const snapIncrement = HOUR_HEIGHT / 4;
-      const snappedY = Math.round(relativeY / snapIncrement) * snapIncrement;
+
+      // Update time while dragging
       const hour = Math.floor(snappedY / HOUR_HEIGHT);
       const minutes = Math.round((snappedY % HOUR_HEIGHT) / snapIncrement) * 15;
+      const selectedTime = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+        hour,
+        minutes
+      );
+      setDraggableBoxTime(format(selectedTime, "HH:mm"));
+      setEventStartTime(selectedTime);
+      runOnJS(setIsCreatingEvent)(true);
+      setSnappedPosition(snappedY);
 
-      if (hour >= 0 && hour < 24) {
-        const startTime = format(
-          addMinutes(addHours(startOfDay(selectedDate), hour), minutes),
-          "HH:mm"
-        );
-        runOnJS(setIsDragging)(false);
+      // Auto-scroll when near edges
+      if (scrollViewRef.current) {
+        const touchPosition = event.absoluteY - gridOffset.y;
+        if (touchPosition < SCROLL_THRESHOLD) {
+          scrollViewRef.current.scrollTo({
+            y: Math.max(0, scrollY.value - 5),
+            animated: false,
+          });
+        } else if (
+          touchPosition >
+          SCREEN_WIDTH - gridOffset.x - SCROLL_THRESHOLD
+        ) {
+          scrollViewRef.current.scrollTo({
+            y: scrollY.value + 5,
+            animated: false,
+          });
+        }
       }
-      runOnJS(setIsDragging)(false);
+    })
+    .onEnd((event) => {
+      const hour = Math.floor(snappedPosition / HOUR_HEIGHT);
+      if (hour >= 0 && hour < 24) {
+        draggableBoxTime;
+        setIsEventModalVisible(true);
+        setIsCreatingEvent(false);
+      }
     })
     .runOnJS(true);
 
   const composedGesture = Gesture.Simultaneous(longPressGesture, dragGesture);
 
-  {
-    /* HANDLER FUNCTIONS */
-  }
+  /* HANDLER FUNCTIONS */
+
+  const handleSaveEvent = (eventDetails: Omit<Event, "id">) => {
+    const newEvent: Event = {
+      id: "",
+      position: snappedPosition,
+      title: eventDetails.title,
+      startTime: eventDetails.startTime,
+      endTime: eventDetails.endTime,
+      description: eventDetails.description,
+      location: eventDetails.location,
+      attendees: eventDetails.attendees,
+      isAllDay: eventDetails.isAllDay,
+      color: eventDetails.color,
+    };
+    setEvents((prevEvents) => [...prevEvents, newEvent]);
+  };
+
   const handleTimeSlotPress = (hour: Date) => {
     const timeString = format(hour, "HH:mm");
     console.log("Time slot pressed:", timeString);
   };
-
-  const handleDragEnd = (startTime: string) => {};
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -287,6 +365,90 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     ></TouchableOpacity>
                   </View>
                 ))}
+
+                <EventModal
+                  visible={isEventModalVisible}
+                  onClose={() => setIsEventModalVisible(false)}
+                  onSave={handleSaveEvent}
+                  start={eventStartTime}
+                  end={addHours(eventStartTime, 1)}
+                />
+
+                {/* Render all persisted events */}
+                {events.map((event) => {
+                  const { top, height } = calculateEventPosition(
+                    event.startTime,
+                    event.endTime
+                  );
+                  return (
+                    <Animated.View
+                      key={event.id}
+                      style={[
+                        {
+                          position: "absolute",
+                          left: 64,
+                          right: 0,
+                          top: top,
+                          height: height,
+                          backgroundColor: "rgba(59, 130, 246, 0.2)",
+                          borderRadius: 8,
+                          borderLeftWidth: 3,
+                          borderLeftColor: "#3B82F6",
+                          zIndex: 100,
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 4,
+                          elevation: 5,
+                        },
+                      ]}
+                    >
+                      <View className="p-2">
+                        <Text className="text-sm font-medium text-blue-800">
+                          {event.title}
+                        </Text>
+                        <Text className="text-xs text-blue-600">
+                          {format(event.startTime, "HH:mm")} -{" "}
+                          {format(event.endTime, "HH:mm")}
+                        </Text>
+                      </View>
+                    </Animated.View>
+                  );
+                })}
+
+                {/* Draggable event preview */}
+                {isCreatingEvent && (
+                  <Animated.View
+                    style={[
+                      {
+                        position: "absolute",
+                        left: 64,
+                        right: 0,
+                        height: HOUR_HEIGHT / 2,
+                        backgroundColor: "rgba(59, 130, 246, 0.2)",
+                        borderRadius: 8,
+                        borderLeftWidth: 3,
+                        borderLeftColor: "#3B82F6",
+                        zIndex: 100,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 4,
+                        elevation: 5,
+                      },
+                      animatedStyle,
+                    ]}
+                  >
+                    <View className="p-2">
+                      <Text className="text-sm font-medium text-blue-800">
+                        New Event
+                      </Text>
+                      <Text className="text-xs text-blue-600">
+                        {draggableBoxTime}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                )}
               </ScrollView>
             </GestureDetector>
           </View>
