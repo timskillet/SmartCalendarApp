@@ -1,10 +1,8 @@
-import { supabase } from "@/lib/supabase";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Dimensions,
   Modal,
   Platform,
   Switch,
@@ -14,6 +12,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { ColorPicker } from "./ColorPicker";
+
 // Import with a try-catch to handle potential missing module
 let defaultTimezone = "UTC";
 try {
@@ -28,9 +28,16 @@ interface EventModalProps {
   onClose: () => void;
   onSave: (event: {
     title: string;
+    description: string;
+    location: string;
+    attendees: string[];
     startTime: Date;
     endTime: Date;
     allDay: boolean;
+    recurring: boolean;
+    color: string;
+    timezone: string;
+    metadata: Record<string, any>;
   }) => void;
   start: Date;
   end: Date;
@@ -60,39 +67,16 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [recurring, setRecurring] = useState(false);
   const [allDay, setAllDay] = useState(false);
   const [color, setColor] = useState("#000000");
+  const [attendees, setAttendees] = useState([]);
   const [timezone, setTimezone] = useState(defaultTimezone);
   const [metadata, setMetadata] = useState({});
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [selectedColorName, setSelectedColorName] = useState("Black");
-  const [dropdownPosition, setDropdownPosition] = useState({
-    top: 70,
-    bottom: "auto",
-  });
-  const colorPickerRef = useRef<View>(null);
 
   useEffect(() => {
     setStartTime(start);
     setEndTime(end);
   }, [start, end]);
-
-  // Calculate dropdown position when showing
-  useEffect(() => {
-    if (showColorPicker && colorPickerRef.current) {
-      colorPickerRef.current.measure((x, y, width, height, pageX, pageY) => {
-        const screenHeight = Dimensions.get("window").height;
-        const dropdownHeight = colorOptions.length * 50; // Approximate height of dropdown
-
-        // Check if dropdown would go off screen
-        if (pageY + height + dropdownHeight > screenHeight - 100) {
-          // Position dropdown above the button
-          setDropdownPosition({ top: "auto", bottom: height + 5 });
-        } else {
-          // Position dropdown below the button
-          setDropdownPosition({ top: height + 5, bottom: "auto" });
-        }
-      });
-    }
-  }, [showColorPicker]);
 
   const handleAllDay = () => {
     if (allDay) {
@@ -147,7 +131,6 @@ export const EventModal: React.FC<EventModalProps> = ({
   const handleColorSelect = (colorName: string, colorValue: string) => {
     setColor(colorValue);
     setSelectedColorName(colorName);
-    setShowColorPicker(false);
   };
 
   // Close dropdown when clicking outside
@@ -157,68 +140,21 @@ export const EventModal: React.FC<EventModalProps> = ({
     }
   };
 
-  const handleSave = async () => {
-    try {
-      const { data: authData } = await supabase.auth.getSession();
-      console.log("Auth session:", JSON.stringify(authData, null, 2));
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error("Error getting user:", userError);
-        return;
-      }
-
-      const userId = user?.id;
-
-      if (!userId) {
-        console.error("No authenticated user found.");
-        return;
-      }
-
-      console.log("Attempting to insert event with user ID:", userId);
-
-      const { data, error } = await supabase
-        .schema("api")
-        .from("events")
-        .insert([
-          {
-            user_id: userId,
-            title: title || "New Event",
-            description: description || "",
-            start_time: startTime.toISOString(),
-            end_time: endTime.toISOString(),
-            is_all_day: allDay,
-            recurrence: recurring,
-            location: location || "",
-            color: color || "#000000",
-            timezone: timezone,
-            metadata: metadata || {},
-            created_at: new Date().toISOString(),
-          },
-        ])
-        .select();
-
-      if (error) {
-        console.error("Error inserting event:", error.message);
-        console.error("Error details:", JSON.stringify(error, null, 2));
-      } else {
-        console.log("Event created successfully:", data);
-        onSave({
-          title: title || "New Event",
-          startTime: startTime,
-          endTime: endTime,
-          allDay,
-        });
-      }
-    } catch (error) {
-      console.error("Unexpected error in handleSave:", error);
-    } finally {
-      onClose();
-    }
+  const handleSave = () => {
+    onSave({
+      title: title || "New Event",
+      description: description,
+      attendees: attendees,
+      location: location,
+      startTime: startTime,
+      endTime: endTime,
+      color: color || "#3B82F6", // Pass the color to parent component
+      recurring: recurring,
+      allDay: allDay,
+      timezone: timezone,
+      metadata: metadata,
+    });
+    onClose();
   };
 
   return (
@@ -302,59 +238,30 @@ export const EventModal: React.FC<EventModalProps> = ({
               <View className="mb-4 relative">
                 <Text className="text-gray-600 mb-2">Select Color</Text>
                 <TouchableOpacity
-                  ref={colorPickerRef}
-                  className="border border-gray-200 rounded-lg p-3 flex-row items-center"
-                  onPress={() => setShowColorPicker(!showColorPicker)}
+                  onPress={() => setShowColorPicker(true)}
+                  className="flex-row items-center border border-gray-200 rounded-lg p-2"
                 >
                   <View
+                    className="w-6 h-6 rounded-full mr-2"
                     style={{ backgroundColor: color }}
-                    className="w-5 h-5 rounded-full mr-2"
                   />
-                  <Text>{selectedColorName}</Text>
+                  <Text className="text-gray-800">{selectedColorName}</Text>
                 </TouchableOpacity>
-
-                {showColorPicker && (
-                  <View
-                    className="absolute left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-md z-10"
-                    style={{
-                      top:
-                        dropdownPosition.top !== "auto"
-                          ? dropdownPosition.top
-                          : undefined,
-                      bottom:
-                        dropdownPosition.bottom !== "auto"
-                          ? dropdownPosition.bottom
-                          : undefined,
-                      maxHeight: 200,
-                    }}
-                  >
-                    {colorOptions.map((item) => (
-                      <TouchableOpacity
-                        key={item.value}
-                        className="flex-row items-center p-3 border-b border-gray-100"
-                        onPress={() => handleColorSelect(item.name, item.value)}
-                      >
-                        <View
-                          style={{ backgroundColor: item.value }}
-                          className="w-5 h-5 rounded-full mr-2"
-                        />
-                        <Text>{item.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                <ColorPicker
+                  isVisible={showColorPicker}
+                  onClose={() => setShowColorPicker(false)}
+                  onSelectColor={handleColorSelect}
+                  selectedColor={color}
+                />
               </View>
 
-              <View className="flex-row justify-between gap-3">
-                <TouchableOpacity
-                  className="px-4 py-3 rounded-lg min-w-[80px] items-center bg-gray-200"
-                  onPress={onClose}
-                >
+              <View className="flex-row justify-end mt-4">
+                <TouchableOpacity onPress={onClose} className="px-4 py-2 mr-2">
                   <Text className="text-gray-600">Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="px-4 py-3 rounded-lg min-w-[80px] items-center bg-blue-500"
                   onPress={handleSave}
+                  className="bg-blue-500 px-4 py-2 rounded-lg"
                 >
                   <Text className="text-white">Save</Text>
                 </TouchableOpacity>

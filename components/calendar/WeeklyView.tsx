@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Dimensions,
   ScrollView,
   Text,
@@ -7,6 +8,7 @@ import {
   View,
 } from "react-native";
 
+import { supabase } from "@/lib/supabase";
 import {
   addHours,
   addWeeks,
@@ -26,7 +28,6 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
@@ -34,15 +35,19 @@ import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { EventModal } from "./EventModal";
 
 export interface Event {
-  title: string;
+  id: string;
+  title?: string;
   description?: string;
   startTime: Date;
   endTime: Date;
   position: number;
-  color?: string;
+  color: string;
   isAllDay: boolean;
   location?: string;
   attendees?: string[];
+  recurring: boolean;
+  timezone?: string;
+  metadata?: Record<string, any>;
 }
 
 interface WeeklyViewProps {
@@ -65,7 +70,7 @@ const calculateEventPosition = (startTime: Date, endTime: Date) => {
 
   // Calculate height based on duration
   const durationHours = endHour - startHour + (endMinutes - startMinutes) / 60;
-  const height = durationHours * HOUR_HEIGHT;
+  const height = Math.max(durationHours * HOUR_HEIGHT, HOUR_HEIGHT / 2); // Minimum height of 30 minutes
 
   return { top: startPosition, height };
 };
@@ -137,47 +142,73 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const longPressGesture = Gesture.LongPress()
     .minDuration(400)
     .onStart((event) => {
-      setIsCreatingEvent(true);
-      const relativeY = event.absoluteY - gridOffset.y + scrollY.value;
-      const hour = Math.floor(
-        (event.absoluteY - gridOffset.y + scrollY.value) / HOUR_HEIGHT
-      );
+      // Check if we're touching an existing event
+      const touchY = event.absoluteY - gridOffset.y + scrollY.value;
+      const touchX = event.absoluteX;
 
-      if (hour >= 0 && hour < 24) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-        // Position box centered on touch point
-        const snapIncrement = HOUR_HEIGHT / 4;
-        const snappedY = Math.round(relativeY / snapIncrement) * snapIncrement;
-        setSnappedPosition(snappedY);
-        translateY.value = snappedY;
-
-        // Update time while dragging
-        const hour = Math.floor(snappedY / HOUR_HEIGHT);
-        const minutes =
-          Math.round((snappedY % HOUR_HEIGHT) / snapIncrement) * 15;
-        const selectedTime = new Date(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate(),
-          hour,
-          minutes
+      // Only create new event if we're not touching an existing event
+      const isTouchingEvent = events.some((event) => {
+        const { top, height } = calculateEventPosition(
+          event.startTime,
+          event.endTime
         );
-        setDraggableBoxTime(format(selectedTime, "HH:mm"));
-        setEventStartTime(selectedTime);
+        const eventLeft = 64; // Left position of events
+        const eventRight = SCREEN_WIDTH; // Right edge of screen
+
+        return (
+          touchY >= top &&
+          touchY <= top + height &&
+          touchX >= eventLeft &&
+          touchX <= eventRight
+        );
+      });
+
+      if (!isTouchingEvent) {
+        setIsCreatingEvent(true);
+        const relativeY = touchY;
+        const hour = Math.floor(relativeY / HOUR_HEIGHT);
+
+        if (hour >= 0 && hour < 24) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+          // Position box centered on touch point
+          const snapIncrement = HOUR_HEIGHT / 4;
+          const snappedY =
+            Math.round(relativeY / snapIncrement) * snapIncrement;
+          setSnappedPosition(snappedY);
+          translateY.value = snappedY;
+
+          // Update time while dragging
+          const hour = Math.floor(snappedY / HOUR_HEIGHT);
+          const minutes =
+            Math.round((snappedY % HOUR_HEIGHT) / snapIncrement) * 15;
+          const selectedTime = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate(),
+            hour,
+            minutes
+          );
+          setDraggableBoxTime(format(selectedTime, "HH:mm"));
+          setEventStartTime(selectedTime);
+        }
       }
     })
     .onTouchesUp(() => {
-      const hour = Math.floor(snappedPosition / HOUR_HEIGHT);
-      if (hour >= 0 && hour < 24) {
-        setIsEventModalVisible(true);
-        setIsCreatingEvent(false);
+      if (isCreatingEvent) {
+        const hour = Math.floor(snappedPosition / HOUR_HEIGHT);
+        if (hour >= 0 && hour < 24) {
+          setIsEventModalVisible(true);
+          setIsCreatingEvent(false);
+        }
       }
     })
     .runOnJS(true);
 
   const dragGesture = Gesture.Pan()
     .onUpdate((event) => {
+      if (!isCreatingEvent) return;
+
       const relativeY = event.absoluteY - gridOffset.y + scrollY.value;
       const snapIncrement = HOUR_HEIGHT / 4;
       const snappedY = Math.round(relativeY / snapIncrement) * snapIncrement;
@@ -214,34 +245,15 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       );
       setDraggableBoxTime(format(selectedTime, "HH:mm"));
       setEventStartTime(selectedTime);
-      runOnJS(setIsCreatingEvent)(true);
       setSnappedPosition(snappedY);
-
-      // Auto-scroll when near edges
-      if (scrollViewRef.current) {
-        const touchPosition = event.absoluteY - gridOffset.y;
-        if (touchPosition < SCROLL_THRESHOLD) {
-          scrollViewRef.current.scrollTo({
-            y: Math.max(0, scrollY.value - 5),
-            animated: false,
-          });
-        } else if (
-          touchPosition >
-          SCREEN_WIDTH - gridOffset.x - SCROLL_THRESHOLD
-        ) {
-          scrollViewRef.current.scrollTo({
-            y: scrollY.value + 5,
-            animated: false,
-          });
-        }
-      }
     })
     .onEnd((event) => {
-      const hour = Math.floor(snappedPosition / HOUR_HEIGHT);
-      if (hour >= 0 && hour < 24) {
-        draggableBoxTime;
-        setIsEventModalVisible(true);
-        setIsCreatingEvent(false);
+      if (isCreatingEvent) {
+        const hour = Math.floor(snappedPosition / HOUR_HEIGHT);
+        if (hour >= 0 && hour < 24) {
+          setIsEventModalVisible(true);
+          setIsCreatingEvent(false);
+        }
       }
     })
     .runOnJS(true);
@@ -250,33 +262,113 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
   /* HANDLER FUNCTIONS */
 
-  const handleSaveEvent = (eventDetails: {
-    title: string;
+  const handleSaveEvent = async (eventDetails: {
+    title?: string;
     startTime: Date;
     endTime: Date;
     allDay: boolean;
     description?: string;
     location?: string;
     attendees?: string[];
-    color?: string;
+    recurring: boolean;
+    color: string;
+    timezone?: string;
+    metadata?: Record<string, any>;
   }) => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      console.error("Error getting user:", userError);
+      return;
+    }
+    const userId = user?.id;
+    if (!userId) {
+      console.error("No authenticated user found.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .schema("api")
+      .from("events")
+      .insert([
+        {
+          user_id: userId,
+          title: eventDetails.title || "New Event",
+          description: eventDetails.description || "",
+          start_time: eventDetails.startTime.toISOString(),
+          end_time: eventDetails.endTime.toISOString(),
+          is_all_day: eventDetails.allDay,
+          recurrence: eventDetails.recurring,
+          location: eventDetails.location || "",
+          color: eventDetails.color || "#3B82F6",
+          timezone: eventDetails.timezone,
+          metadata: eventDetails.metadata || {},
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .select();
+
     const newEvent: Event = {
+      id: data?.[0]?.id,
       position: snappedPosition,
-      title: eventDetails.title,
+      title: eventDetails.title || "New Event",
       startTime: eventDetails.startTime,
       endTime: eventDetails.endTime,
-      description: eventDetails.description,
-      location: eventDetails.location,
-      attendees: eventDetails.attendees,
+      description: eventDetails.description || "",
+      location: eventDetails.location || "",
+      attendees: eventDetails.attendees || [],
       isAllDay: eventDetails.allDay,
-      color: eventDetails.color,
+      color: eventDetails.color || "#3B82F6",
+      recurring: eventDetails.recurring,
+      timezone: eventDetails.timezone || "",
+      metadata: eventDetails.metadata,
     };
-    setEvents((prevEvents) => [...prevEvents, newEvent]);
+    console.log("New event created:", newEvent);
+    setEvents([...events, newEvent]);
   };
 
   const handleTimeSlotPress = (hour: Date) => {
     const timeString = format(hour, "HH:mm");
     console.log("Time slot pressed:", timeString);
+  };
+
+  const handleDeleteEvent = async (eventToDelete: Event) => {
+    try {
+      const { data: authData } = await supabase.auth.getSession();
+      const userId = authData.session?.user?.id;
+
+      if (!userId) {
+        console.error("No authenticated user found.");
+        return;
+      }
+
+      // Delete from Supabase
+      const { error } = await supabase
+        .schema("api")
+        .from("events")
+        .delete()
+        .match({
+          user_id: userId,
+          title: eventToDelete.title,
+          start_time: eventToDelete.startTime.toISOString(),
+          end_time: eventToDelete.endTime.toISOString(),
+        });
+
+      if (error) {
+        console.error("Error deleting event:", error);
+        return;
+      }
+
+      // Update local state
+      setEvents((prevEvents) =>
+        prevEvents.filter((event) => event !== eventToDelete)
+      );
+    } catch (error) {
+      console.error("Error in handleDeleteEvent:", error);
+    }
   };
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -373,6 +465,79 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                   </View>
                 ))}
 
+                {/* Render all persisted events */}
+                {events.map((event, i) => {
+                  const { top, height } = calculateEventPosition(
+                    event.startTime,
+                    event.endTime
+                  );
+                  console.log("Rendering event:", {
+                    title: event.title,
+                    top,
+                    height,
+                    startTime: event.startTime.toISOString(),
+                    endTime: event.endTime.toISOString(),
+                  });
+
+                  return (
+                    <TouchableOpacity
+                      key={`${event.title}-${event.startTime.toISOString()}`}
+                      onPress={() => {
+                        Alert.alert(
+                          "Delete Event",
+                          "Are you sure you want to delete this event?",
+                          [
+                            {
+                              text: "Cancel",
+                              style: "cancel",
+                            },
+                            {
+                              text: "Delete",
+                              style: "destructive",
+                              onPress: () => handleDeleteEvent(event),
+                            },
+                          ]
+                        );
+                      }}
+                      style={{
+                        position: "absolute",
+                        left: 64,
+                        right: 0,
+                        top: top,
+                        height: height,
+                        zIndex: 100,
+                      }}
+                    >
+                      <View
+                        style={[
+                          {
+                            flex: 1,
+                            backgroundColor: `${event.color}20`,
+                            borderRadius: 8,
+                            borderLeftWidth: 3,
+                            borderLeftColor: event.color,
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.25,
+                            shadowRadius: 4,
+                            elevation: 5,
+                          },
+                        ]}
+                      >
+                        <View className="p-2">
+                          <Text className="text-sm font-medium">
+                            {event.title}
+                          </Text>
+                          <Text className="text-xs">
+                            {format(event.startTime, "HH:mm")} -{" "}
+                            {format(event.endTime, "HH:mm")}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
                 <EventModal
                   visible={isEventModalVisible}
                   onClose={() => setIsEventModalVisible(false)}
@@ -380,48 +545,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                   start={eventStartTime}
                   end={addHours(eventStartTime, 1)}
                 />
-
-                {/* Render all persisted events */}
-                {events.map((event, i) => {
-                  const { top, height } = calculateEventPosition(
-                    event.startTime,
-                    event.endTime
-                  );
-                  return (
-                    <Animated.View
-                      key={i}
-                      style={[
-                        {
-                          position: "absolute",
-                          left: 64,
-                          right: 0,
-                          top: top,
-                          height: height,
-                          backgroundColor: "rgba(59, 130, 246, 0.2)",
-                          borderRadius: 8,
-                          borderLeftWidth: 3,
-                          borderLeftColor: "#3B82F6",
-                          zIndex: 100,
-                          shadowColor: "#000",
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.25,
-                          shadowRadius: 4,
-                          elevation: 5,
-                        },
-                      ]}
-                    >
-                      <View className="p-2">
-                        <Text className="text-sm font-medium text-blue-800">
-                          {event.title}
-                        </Text>
-                        <Text className="text-xs text-blue-600">
-                          {format(event.startTime, "HH:mm")} -{" "}
-                          {format(event.endTime, "HH:mm")}
-                        </Text>
-                      </View>
-                    </Animated.View>
-                  );
-                })}
 
                 {/* Draggable event preview */}
                 {isCreatingEvent && (
