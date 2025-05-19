@@ -34,14 +34,13 @@ import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { EventModal } from "./EventModal";
 
 export interface Event {
-  id: string;
   title: string;
   description?: string;
   startTime: Date;
   endTime: Date;
   position: number;
   color?: string;
-  isAllDay?: boolean;
+  isAllDay: boolean;
   location?: string;
   attendees?: string[];
 }
@@ -251,9 +250,17 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
   /* HANDLER FUNCTIONS */
 
-  const handleSaveEvent = (eventDetails: Omit<Event, "id">) => {
+  const handleSaveEvent = (eventDetails: {
+    title: string;
+    startTime: Date;
+    endTime: Date;
+    allDay: boolean;
+    description?: string;
+    location?: string;
+    attendees?: string[];
+    color?: string;
+  }) => {
     const newEvent: Event = {
-      id: "",
       position: snappedPosition,
       title: eventDetails.title,
       startTime: eventDetails.startTime,
@@ -261,7 +268,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       description: eventDetails.description,
       location: eventDetails.location,
       attendees: eventDetails.attendees,
-      isAllDay: eventDetails.isAllDay,
+      isAllDay: eventDetails.allDay,
       color: eventDetails.color,
     };
     setEvents((prevEvents) => [...prevEvents, newEvent]);
@@ -375,14 +382,14 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                 />
 
                 {/* Render all persisted events */}
-                {events.map((event) => {
+                {events.map((event, i) => {
                   const { top, height } = calculateEventPosition(
                     event.startTime,
                     event.endTime
                   );
                   return (
                     <Animated.View
-                      key={event.id}
+                      key={i}
                       style={[
                         {
                           position: "absolute",
