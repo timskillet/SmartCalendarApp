@@ -1,4 +1,4 @@
-import { WeeklyView } from "@/components/calendar/WeeklyView";
+import { WeeklyView } from "@/components/calendar/weekly/WeeklyView";
 import { useState } from "react";
 import { SafeAreaView } from "react-native";
 

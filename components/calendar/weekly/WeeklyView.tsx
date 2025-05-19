@@ -1,26 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Dimensions,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Dimensions, ScrollView, Text, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
-import {
-  addHours,
-  addWeeks,
-  eachDayOfInterval,
-  endOfWeek,
-  format,
-  isSameDay,
-  isToday,
-  startOfDay,
-  startOfWeek,
-  subWeeks,
-} from "date-fns";
+import { addHours, addWeeks, format, subWeeks } from "date-fns";
 import * as Haptics from "expo-haptics";
 import {
   Gesture,
@@ -31,24 +13,14 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
-import FontAwesome from "react-native-vector-icons/FontAwesome";
-import { EventModal } from "./EventModal";
-
-export interface Event {
-  id: string;
-  title?: string;
-  description?: string;
-  startTime: Date;
-  endTime: Date;
-  position: number;
-  color: string;
-  isAllDay: boolean;
-  location?: string;
-  attendees?: string[];
-  recurring: boolean;
-  timezone?: string;
-  metadata?: Record<string, any>;
-}
+import { calculateEventPosition, getHours } from "../utils/utils";
+import { EditEventModal } from "./components/EditEventModal";
+import { EventBox } from "./components/EventBox";
+import { EventModal } from "./components/EventModal";
+import { TimeSlotGrid } from "./components/TimeSlotGrid";
+import { WeeklyViewHeader } from "./components/WeeklyViewHeader";
+import { HOUR_HEIGHT, SCROLL_THRESHOLD } from "./constants";
+import { Event } from "./types";
 
 interface WeeklyViewProps {
   selectedDate: Date;
@@ -56,24 +28,6 @@ interface WeeklyViewProps {
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const HOUR_HEIGHT = 60;
-const SCROLL_THRESHOLD = 50;
-
-const calculateEventPosition = (startTime: Date, endTime: Date) => {
-  const startHour = startTime.getHours();
-  const startMinutes = startTime.getMinutes();
-  const endHour = endTime.getHours();
-  const endMinutes = endTime.getMinutes();
-
-  // Calculate position based on start time
-  const startPosition = (startHour + startMinutes / 60) * HOUR_HEIGHT;
-
-  // Calculate height based on duration
-  const durationHours = endHour - startHour + (endMinutes - startMinutes) / 60;
-  const height = Math.max(durationHours * HOUR_HEIGHT, HOUR_HEIGHT / 2); // Minimum height of 30 minutes
-
-  return { top: startPosition, height };
-};
 
 export const WeeklyView: React.FC<WeeklyViewProps> = ({
   selectedDate,
@@ -88,6 +42,8 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const [isEventModalVisible, setIsEventModalVisible] = useState(false);
   const [draggableBoxTime, setDraggableBoxTime] = useState(""); // Event time displayed in event box
   const [eventStartTime, setEventStartTime] = useState<Date>(new Date()); // event start time used for EventModal component
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
 
   // Measure grid position
   useEffect(() => {
@@ -106,22 +62,15 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const translateY = useSharedValue(0);
 
   // Add refs to measure header components
-  const headerRef = useRef<View>(null);
-  const weekRowRef = useRef<View>(null);
+  const headerRef = useRef<View>(null!);
+  const weekRowRef = useRef<View>(null!);
 
   // Add state for measuring grid position
   const gridRef = useRef<View>(null);
   const [gridOffset, setGridOffset] = useState({ x: 0, y: 0 });
 
   /* CALENDAR DATA */
-  const days = eachDayOfInterval({
-    start: startOfWeek(currentWeek),
-    end: endOfWeek(currentWeek),
-  });
-
-  const hours = Array.from({ length: 24 }, (_, i) =>
-    addHours(startOfDay(selectedDate), i)
-  );
+  const hours = getHours(selectedDate);
 
   /* GESTURE HANDLING */
   const handleScroll = (event: any) => {
@@ -131,11 +80,14 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onEnd((event) => {
+      console.log("SWIPER NO SWIPING");
+      console.log("BEFORE", currentWeek);
       if (event.translationX < -50) {
         setCurrentWeek(addWeeks(currentWeek, 1));
       } else if (event.translationX > 50) {
         setCurrentWeek(subWeeks(currentWeek, 1));
       }
+      console.log("AFTER", currentWeek);
     })
     .runOnJS(true);
 
@@ -261,7 +213,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const composedGesture = Gesture.Simultaneous(longPressGesture, dragGesture);
 
   /* HANDLER FUNCTIONS */
-
   const handleSaveEvent = async (eventDetails: {
     title?: string;
     startTime: Date;
@@ -335,7 +286,20 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     console.log("Time slot pressed:", timeString);
   };
 
-  const handleDeleteEvent = async (eventToDelete: Event) => {
+  const handleEventPress = (event: Event) => {
+    setSelectedEvent(event);
+    setIsEditModalVisible(true);
+  };
+
+  const handleUpdateEvent = (updatedEvent: Event) => {
+    setEvents((prevEvents) =>
+      prevEvents.map((event) =>
+        event.id === updatedEvent.id ? updatedEvent : event
+      )
+    );
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
     try {
       const { data: authData } = await supabase.auth.getSession();
       const userId = authData.session?.user?.id;
@@ -350,12 +314,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
         .schema("api")
         .from("events")
         .delete()
-        .match({
-          user_id: userId,
-          title: eventToDelete.title,
-          start_time: eventToDelete.startTime.toISOString(),
-          end_time: eventToDelete.endTime.toISOString(),
-        });
+        .eq("id", eventId);
 
       if (error) {
         console.error("Error deleting event:", error);
@@ -364,7 +323,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
       // Update local state
       setEvents((prevEvents) =>
-        prevEvents.filter((event) => event !== eventToDelete)
+        prevEvents.filter((event) => event.id !== eventId)
       );
     } catch (error) {
       console.error("Error in handleDeleteEvent:", error);
@@ -381,55 +340,12 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       <GestureDetector gesture={swipeGesture}>
         <View className="flex-1 m-2">
           {/* Header */}
-          <View ref={headerRef} className="px-4 py-2 border-b border-gray-200">
-            <View className="flex-row justify-between items-center">
-              <TouchableOpacity className="p-2">
-                <FontAwesome name="chevron-left" size={24} color="black" />
-              </TouchableOpacity>
-              <Text className="text-xl font-semibold">
-                {format(selectedDate, "MMMM yyyy")}
-              </Text>
-              <View className="w-12"></View>
-            </View>
-
-            {/* Week Row */}
-            <View ref={weekRowRef} className="flex-row justify-between mt-4">
-              {days.map((date) => (
-                <TouchableOpacity
-                  key={date.toISOString()}
-                  onPress={() => {
-                    onSelectDate(date);
-                  }}
-                  className="items-center py-2"
-                >
-                  <Text className="text-xs text-gray-500">
-                    {format(date, "EEE")}
-                  </Text>
-                  <View
-                    className={`w-9 h-9 rounded-full items-center justify-center
-                                          ${
-                                            isSameDay(date, selectedDate)
-                                              ? "bg-blue-500"
-                                              : ""
-                                          }
-                                      `}
-                  >
-                    <Text
-                      className={`text-lg ${
-                        isSameDay(date, selectedDate)
-                          ? "text-white"
-                          : isToday(date)
-                          ? "text-blue-500"
-                          : ""
-                      }`}
-                    >
-                      {format(date, "d")}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          <WeeklyViewHeader
+            headerRef={headerRef}
+            weekRowRef={weekRowRef}
+            selectedDate={selectedDate}
+            onSelectDate={onSelectDate}
+          />
           {/* Time slots grid */}
           <View
             ref={gridRef}
@@ -448,21 +364,11 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                 onScroll={handleScroll}
               >
                 {hours.map((hour) => (
-                  <View
+                  <TimeSlotGrid
                     key={hour.toISOString()}
-                    style={{ height: HOUR_HEIGHT }}
-                    className="flex-row border-b border-gray-100"
-                  >
-                    <View className="w-16 items-center justify-start py-2">
-                      <Text className="text-xs text-gray-500">
-                        {format(hour, "h a")}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      className="flex-1 border-l border-gray-100"
-                      onPress={() => handleTimeSlotPress(hour)}
-                    ></TouchableOpacity>
-                  </View>
+                    hour={hour}
+                    handleTimeSlotPress={handleTimeSlotPress}
+                  />
                 ))}
 
                 {/* Render all persisted events */}
@@ -471,80 +377,40 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     event.startTime,
                     event.endTime
                   );
-                  console.log("Rendering event:", {
-                    title: event.title,
-                    top,
-                    height,
-                    startTime: event.startTime.toISOString(),
-                    endTime: event.endTime.toISOString(),
-                  });
 
                   return (
-                    <TouchableOpacity
-                      key={`${event.title}-${event.startTime.toISOString()}`}
-                      onPress={() => {
-                        Alert.alert(
-                          "Delete Event",
-                          "Are you sure you want to delete this event?",
-                          [
-                            {
-                              text: "Cancel",
-                              style: "cancel",
-                            },
-                            {
-                              text: "Delete",
-                              style: "destructive",
-                              onPress: () => handleDeleteEvent(event),
-                            },
-                          ]
-                        );
-                      }}
-                      style={{
-                        position: "absolute",
-                        left: 64,
-                        right: 0,
-                        top: top,
-                        height: height,
-                        zIndex: 100,
-                      }}
-                    >
-                      <View
-                        style={[
-                          {
-                            flex: 1,
-                            backgroundColor: `${event.color}20`,
-                            borderRadius: 8,
-                            borderLeftWidth: 3,
-                            borderLeftColor: event.color,
-                            shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.25,
-                            shadowRadius: 4,
-                            elevation: 5,
-                          },
-                        ]}
-                      >
-                        <View className="p-2">
-                          <Text className="text-sm font-medium">
-                            {event.title}
-                          </Text>
-                          <Text className="text-xs">
-                            {format(event.startTime, "HH:mm")} -{" "}
-                            {format(event.endTime, "HH:mm")}
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
+                    <EventBox
+                      key={`${event.id}`}
+                      event={event}
+                      top={top}
+                      height={height}
+                      handleEventPress={handleEventPress}
+                    />
                   );
                 })}
 
-                <EventModal
-                  visible={isEventModalVisible}
-                  onClose={() => setIsEventModalVisible(false)}
-                  onSave={handleSaveEvent}
-                  start={eventStartTime}
-                  end={addHours(eventStartTime, 1)}
-                />
+                {isEventModalVisible && (
+                  <EventModal
+                    visible={isEventModalVisible}
+                    onClose={() => setIsEventModalVisible(false)}
+                    onSave={handleSaveEvent}
+                    start={eventStartTime}
+                    end={addHours(eventStartTime, 1)}
+                  />
+                )}
+
+                {selectedEvent && (
+                  <EditEventModal
+                    visible={isEditModalVisible}
+                    onClose={() => {
+                      setIsEditModalVisible(false);
+                      setSelectedEvent(null);
+                    }}
+                    onUpdate={handleUpdateEvent}
+                    onDelete={handleDeleteEvent}
+                    event={selectedEvent}
+                  />
+                )}
 
                 {/* Draggable event preview */}
                 {isCreatingEvent && (
