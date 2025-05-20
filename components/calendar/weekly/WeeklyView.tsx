@@ -2,7 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { Dimensions, ScrollView, Text, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
-import { addHours, addWeeks, format, subWeeks } from "date-fns";
+import {
+  addDays,
+  addHours,
+  addWeeks,
+  format,
+  subDays,
+  subWeeks,
+} from "date-fns";
 import * as Haptics from "expo-haptics";
 import {
   Gesture,
@@ -13,6 +20,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
+import { Event } from "../types";
 import { calculateEventPosition, getHours } from "../utils/utils";
 import { EditEventModal } from "./components/EditEventModal";
 import { EventBox } from "./components/EventBox";
@@ -20,7 +28,6 @@ import { EventModal } from "./components/EventModal";
 import { TimeSlotGrid } from "./components/TimeSlotGrid";
 import { WeeklyViewHeader } from "./components/WeeklyViewHeader";
 import { HOUR_HEIGHT, SCROLL_THRESHOLD } from "./constants";
-import { Event } from "./types";
 
 interface WeeklyViewProps {
   selectedDate: Date;
@@ -44,6 +51,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const [eventStartTime, setEventStartTime] = useState<Date>(new Date()); // event start time used for EventModal component
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [dateSelected, setDateSelected] = useState(selectedDate);
 
   // Measure grid position
   useEffect(() => {
@@ -70,7 +78,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const [gridOffset, setGridOffset] = useState({ x: 0, y: 0 });
 
   /* CALENDAR DATA */
-  const hours = getHours(selectedDate);
+  const hours = getHours(dateSelected);
 
   /* GESTURE HANDLING */
   const handleScroll = (event: any) => {
@@ -80,14 +88,13 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onEnd((event) => {
-      console.log("SWIPER NO SWIPING");
-      console.log("BEFORE", currentWeek);
       if (event.translationX < -50) {
         setCurrentWeek(addWeeks(currentWeek, 1));
+        setDateSelected(addDays(dateSelected, 7));
       } else if (event.translationX > 50) {
         setCurrentWeek(subWeeks(currentWeek, 1));
+        setDateSelected(subDays(dateSelected, 7));
       }
-      console.log("AFTER", currentWeek);
     })
     .runOnJS(true);
 
@@ -135,9 +142,9 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
           const minutes =
             Math.round((snappedY % HOUR_HEIGHT) / snapIncrement) * 15;
           const selectedTime = new Date(
-            selectedDate.getFullYear(),
-            selectedDate.getMonth(),
-            selectedDate.getDate(),
+            dateSelected.getFullYear(),
+            dateSelected.getMonth(),
+            dateSelected.getDate(),
             hour,
             minutes
           );
@@ -189,9 +196,9 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       const hour = Math.floor(snappedY / HOUR_HEIGHT);
       const minutes = Math.round((snappedY % HOUR_HEIGHT) / snapIncrement) * 15;
       const selectedTime = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth(),
-        selectedDate.getDate(),
+        dateSelected.getFullYear(),
+        dateSelected.getMonth(),
+        dateSelected.getDate(),
         hour,
         minutes
       );
@@ -343,8 +350,8 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
           <WeeklyViewHeader
             headerRef={headerRef}
             weekRowRef={weekRowRef}
-            selectedDate={selectedDate}
-            onSelectDate={onSelectDate}
+            selectedDate={dateSelected}
+            onSelectDate={setDateSelected}
           />
           {/* Time slots grid */}
           <View

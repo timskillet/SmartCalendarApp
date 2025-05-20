@@ -14,7 +14,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { Event } from "../types/index";
+import { Event } from "../../types/index";
 import { ColorPicker } from "./ColorPicker";
 
 interface EditEventModalProps {

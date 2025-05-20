@@ -23,10 +23,12 @@ import Animated, {
   SlideOutLeft,
   SlideOutRight,
 } from "react-native-reanimated";
+import type { Event } from "./types/index";
 
 interface YearlyViewProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
+  events?: Event[];
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -36,19 +38,18 @@ const MONTH_WIDTH = (SCREEN_WIDTH - MONTH_PADDING * 3) / 2;
 export const YearlyView: React.FC<YearlyViewProps> = ({
   selectedDate,
   onSelectDate,
+  events = [],
 }) => {
-  const [currentYear, setCurrentYear] = useState(startOfYear(selectedDate));
+  const [currentYear, setCurrentYear] = useState(selectedDate);
   const [slideDirection, setSlideDirection] = useState<"left" | "right">(
-    "left"
+    "right"
   );
 
-  /* CALENDAR DATA */
   const months = eachMonthOfInterval({
     start: startOfYear(currentYear),
     end: endOfYear(currentYear),
   });
 
-  /* GESTURE HANDLING */
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onEnd((event) => {
@@ -65,15 +66,15 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
   const renderMonth = (month: Date) => {
     const monthStart = startOfMonth(month);
     const monthEnd = endOfMonth(month);
-    const firstDayOfMonth = monthStart.getDay();
+    const firstDayOfMonth = monthStart.getDay(); // 0-6 for Sunday-Saturday
 
-    // Days in month
+    // Get only current month days
     const days = eachDayOfInterval({
       start: monthStart,
       end: monthEnd,
     });
 
-    // Empty cells for days before the first day of the month
+    // Create array for empty cells at the start
     const emptyCells = Array.from({ length: firstDayOfMonth });
 
     const weekDayLabels = [
@@ -93,7 +94,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
         className="p-2"
         style={{ width: MONTH_WIDTH }}
       >
-        <Text className="font-bold text-xl mb-2">{format(month, "MMMM")}</Text>
+        <Text className="font-medium mb-2">{format(month, "MMMM")}</Text>
         <View className="flex-row flex-wrap">
           {weekDayLabels.map(({ key, label }) => (
             <Text
@@ -114,7 +115,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
             />
           ))}
 
-          {/* Days in month */}
+          {/* Current month days */}
           {days.map((date) => (
             <View
               key={date.toISOString()}
@@ -123,13 +124,16 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
             >
               <Text
                 className={`text-xs ${
-                  isToday(date)
-                    ? "text-white font-bold rounded-full bg-blue-500"
-                    : "text-gray-900"
+                  isToday(date) ? "text-blue-500 font-bold" : "text-gray-900"
                 }`}
               >
                 {format(date, "d")}
               </Text>
+              {events.some(
+                (event) =>
+                  format(new Date(event.startTime), "yyyy-MM-dd") ===
+                  format(date, "yyyy-MM-dd")
+              ) && <View className="w-1 h-1 bg-blue-500 rounded-full mt-1" />}
             </View>
           ))}
         </View>

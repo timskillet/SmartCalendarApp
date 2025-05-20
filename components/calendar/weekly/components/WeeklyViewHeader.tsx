@@ -17,6 +17,7 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
   onSelectDate,
 }) => {
   const days = getDays(selectedDate);
+
   return (
     <View ref={headerRef} className="px-4 py-2 border-b border-gray-200">
       <View className="flex-row justify-between items-center">
@@ -40,8 +41,14 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
           >
             <Text className="text-xs text-gray-500">{format(date, "EEE")}</Text>
             <View
-              className={`w-9 h-9 rounded-full items-center justify-center
-                ${isSameDay(date, selectedDate) ? "bg-blue-500" : ""}
+              className={`w-9 h-9 rounded-lg items-center justify-center
+                ${
+                  isSameDay(date, selectedDate)
+                    ? isToday(date)
+                      ? "bg-blue-500"
+                      : "bg-black"
+                    : ""
+                }
               `}
             >
               <Text
@@ -50,7 +57,7 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
                     ? "text-white"
                     : isToday(date)
                     ? "text-blue-500"
-                    : ""
+                    : "text-black"
                 }`}
               >
                 {format(date, "d")}
