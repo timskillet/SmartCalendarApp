@@ -1,8 +1,10 @@
 import { addMinutes, eachDayOfInterval, format, parse } from "date-fns";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -46,6 +48,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
 }) => {
   const [days, setDays] = useState<Date[]>([]);
   const [hours, setHours] = useState<string[]>([]);
+  const [isScrolling, setIsScrolling] = useState(false);
   const [selectedCells, setSelectedCells] = useState<{
     [key: string]: boolean;
   }>({});
@@ -64,6 +67,8 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
     MIN_CELL_HEIGHT,
     numTimeSlots > 0 ? availableHeight / numTimeSlots : availableHeight
   );
+
+  const dateScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     // Generate days in the date range
@@ -129,6 +134,16 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
     onSave(availability);
   };
 
+  const handleHorizontalScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    if (isScrolling) return;
+    setIsScrolling(true);
+    const { x } = event.nativeEvent.contentOffset;
+    dateScrollRef.current?.scrollTo({ x, animated: false });
+    setIsScrolling(false);
+  };
+
   return (
     <View className="flex-1 bg-white">
       {/* Header with back and save buttons */}
@@ -155,7 +170,12 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
       <View style={styles.headerRow}>
         <View style={[styles.cornerCell, { width: TIME_COLUMN_WIDTH }]} />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <ScrollView
+          horizontal
+          ref={dateScrollRef}
+          showsHorizontalScrollIndicator={false}
+          scrollEnabled={false}
+        >
           <View className="flex-row">
             {days.map((date, i) => (
               <View
@@ -195,6 +215,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
             horizontal
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
+            onScroll={handleHorizontalScroll}
           >
             <View>
               {hours.map((hour, hourIndex) => (

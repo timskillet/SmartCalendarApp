@@ -1,5 +1,5 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import React, { useState } from "react";
 import {
   Platform,
@@ -32,10 +32,7 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
   startTime.setHours(9, 0, 0, 0);
   const [endTime, setEndTime] = useState<Date>(new Date());
   endTime.setHours(17, 0, 0, 0);
-  const [dateRange, setDateRange] = useState<DateRange>({
-    startDate: new Date(),
-    endDate: addDays(new Date(), 7),
-  });
+  const [dateRange, setDateRange] = useState<DateRange[]>();
   const [showStartTimePicker, setShowStartTimePicker] = useState(
     Platform.OS === "ios"
   );
@@ -44,7 +41,9 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
   );
 
   // For calendar selection
-  const [markedDates, setMarkedDates] = useState<{ [date: string]: any }>({});
+  const [selectedDates, setSelectedDates] = useState<{ [date: string]: any }>(
+    {}
+  );
 
   const handleTimeChange = (
     type: "startTime" | "endTime",
@@ -77,79 +76,19 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
     }
   };
 
-  const handleDateSelection = (day: any) => {
-    const dateString = day.dateString;
-    const selectedDate = new Date(dateString);
-
-    // If we haven't selected a start date yet, or we're starting a new selection
-    if (!dateRange.startDate || (dateRange.startDate && dateRange.endDate)) {
-      setDateRange({
-        startDate: selectedDate,
-        endDate: selectedDate,
-      });
-
-      // Mark this date
-      setMarkedDates({
-        [dateString]: {
-          selected: true,
-          startingDay: true,
-          endingDay: true,
-          color: "#3498db",
-        },
-      });
+  const onDayPress = (day: { dateString: string }) => {
+    const newSelectedDates = { ...selectedDates };
+    if (newSelectedDates[day.dateString]) {
+      delete newSelectedDates[day.dateString]; // Deselect if already selected
+    } else {
+      newSelectedDates[day.dateString] = { selected: true }; // Select the date
     }
-    // If we have a start date but no end date
-    else if (dateRange.startDate && !dateRange.endDate) {
-      // Ensure end date is after start date
-      if (selectedDate < dateRange.startDate) {
-        setError("End date must be after start date");
-        return;
-      }
-
-      setDateRange({
-        ...dateRange,
-        endDate: selectedDate,
-      });
-
-      // Mark the date range
-      const newMarkedDates: { [date: string]: any } = {};
-      let currentDate = new Date(dateRange.startDate);
-
-      while (currentDate <= selectedDate) {
-        const dateStr = format(currentDate, "yyyy-MM-dd");
-
-        if (
-          format(currentDate, "yyyy-MM-dd") ===
-          format(dateRange.startDate, "yyyy-MM-dd")
-        ) {
-          newMarkedDates[dateStr] = {
-            selected: true,
-            startingDay: true,
-            color: "#3498db",
-          };
-        } else if (
-          format(currentDate, "yyyy-MM-dd") ===
-          format(selectedDate, "yyyy-MM-dd")
-        ) {
-          newMarkedDates[dateStr] = {
-            selected: true,
-            endingDay: true,
-            color: "#3498db",
-          };
-        } else {
-          newMarkedDates[dateStr] = { selected: true, color: "#3498db" };
-        }
-
-        currentDate = addDays(currentDate, 1);
-      }
-
-      setMarkedDates(newMarkedDates);
-    }
+    setSelectedDates(newSelectedDates);
   };
 
   const handleContinue = () => {
-    if (!dateRange.startDate || !dateRange.endDate) {
-      setError("Please select a date range");
+    if (Object.keys(selectedDates).length === 0) {
+      setError("Please select at least one date");
       return;
     }
 
@@ -164,10 +103,18 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
     }
 
     // Call the onContinue prop with the selected date and time ranges
-    onContinue(dateRange, {
-      start: new Date(startTime),
-      end: new Date(endTime),
-    });
+    onContinue(
+      {
+        startDate: new Date(Object.keys(selectedDates)[0]),
+        endDate: new Date(
+          Object.keys(selectedDates)[Object.keys(selectedDates).length - 1]
+        ),
+      },
+      {
+        start: new Date(startTime),
+        end: new Date(endTime),
+      }
+    );
   };
 
   return (
@@ -239,18 +186,17 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
         <View className="mb-8">
           <Text className="text-lg font-semibold mb-4">Select Date Range</Text>
           <View className="bg-gray-50 p-2 rounded-lg">
-            <Text className="text-sm text-gray-600 mb-2 px-2">
-              {dateRange.startDate && dateRange.endDate
-                ? `${format(dateRange.startDate, "MMM d, yyyy")} - ${format(
-                    dateRange.endDate,
-                    "MMM d, yyyy"
-                  )}`
+            {/* <Text className="text-sm text-gray-600 mb-2 px-2">
+              {Object.keys(selectedDates).length > 0
+                ? `Selected Dates: ${Object.keys(selectedDates)
+                    .map((date) => format(new Date(date), "MMM d, yyyy"))
+                    .join(", ")}`
                 : "Tap to select dates"}
-            </Text>
+            </Text> */}
             <Calendar
-              onDayPress={handleDateSelection}
-              markedDates={markedDates}
-              markingType={"period"}
+              onDayPress={onDayPress}
+              markedDates={selectedDates}
+              markingType={"multi-dot"}
               theme={{
                 backgroundColor: "#F9FAFB",
                 calendarBackground: "#F9FAFB",
