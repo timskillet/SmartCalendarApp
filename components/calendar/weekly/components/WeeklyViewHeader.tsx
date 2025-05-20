@@ -8,6 +8,7 @@ interface WeeklyViewHeaderProps {
   weekRowRef: React.RefObject<View>;
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
+  onBackToMonthly: () => void;
 }
 
 export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
@@ -15,13 +16,14 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
   weekRowRef,
   selectedDate,
   onSelectDate,
+  onBackToMonthly,
 }) => {
   const days = getDays(selectedDate);
 
   return (
     <View ref={headerRef} className="px-4 py-2 border-b border-gray-200">
       <View className="flex-row justify-between items-center">
-        <TouchableOpacity className="p-2">
+        <TouchableOpacity className="p-2" onPress={onBackToMonthly}>
           <FontAwesome name="chevron-left" size={24} color="black" />
         </TouchableOpacity>
         <Text className="text-xl font-semibold">

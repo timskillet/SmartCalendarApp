@@ -32,6 +32,7 @@ import { HOUR_HEIGHT, SCROLL_THRESHOLD } from "./constants";
 interface WeeklyViewProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
+  onBackToMonthly: () => void;
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -39,6 +40,7 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 export const WeeklyView: React.FC<WeeklyViewProps> = ({
   selectedDate,
   onSelectDate,
+  onBackToMonthly,
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
@@ -217,7 +219,11 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     })
     .runOnJS(true);
 
-  const composedGesture = Gesture.Simultaneous(longPressGesture, dragGesture);
+  const composedGesture = Gesture.Simultaneous(
+    swipeGesture,
+    longPressGesture,
+    dragGesture
+  );
 
   /* HANDLER FUNCTIONS */
   const handleSaveEvent = async (eventDetails: {
@@ -352,6 +358,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
             weekRowRef={weekRowRef}
             selectedDate={dateSelected}
             onSelectDate={setDateSelected}
+            onBackToMonthly={onBackToMonthly}
           />
           {/* Time slots grid */}
           <View
