@@ -3,11 +3,6 @@ import { AvailabilityGrid } from "@/components/scheduler/AvailabilityGrid";
 import React, { useState } from "react";
 import { SafeAreaView, Text, View } from "react-native";
 
-type DateRange = {
-  startDate: Date;
-  endDate: Date;
-};
-
 type TimeRange = {
   start: Date;
   end: Date;
@@ -19,14 +14,20 @@ type AvailabilityData = {
 
 export default function SchedulerScreen() {
   const [step, setStep] = useState<"form" | "grid">("form");
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
   const [availability, setAvailability] = useState<AvailabilityData | null>(
     null
   );
+  const [proposalId, setProposalId] = useState<string>("");
 
-  const handleFormContinue = (dateRange: DateRange, timeRange: TimeRange) => {
-    setDateRange(dateRange);
+  const handleFormContinue = (
+    proposalId: string,
+    selectedDates: Date[],
+    timeRange: TimeRange
+  ) => {
+    setProposalId(proposalId);
+    setSelectedDates(selectedDates);
     setTimeRange(timeRange);
     setStep("grid");
   };
@@ -48,9 +49,10 @@ export default function SchedulerScreen() {
     <SafeAreaView className="flex-1 bg-white">
       {step === "form" ? (
         <AvailabilityForm onContinue={handleFormContinue} />
-      ) : dateRange && timeRange ? (
+      ) : selectedDates && timeRange ? (
         <AvailabilityGrid
-          dateRange={dateRange}
+          proposalId={proposalId}
+          selectedDates={selectedDates}
           timeRange={timeRange}
           onSave={handleSaveAvailability}
           onBack={handleGridBack}

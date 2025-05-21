@@ -21,7 +21,8 @@ type DateRange = {
 
 interface AvailabilityFormProps {
   onContinue: (
-    dateRange: DateRange,
+    proposalId: string,
+    selectedDates: Date[],
     timeRange: { start: Date; end: Date }
   ) => void;
 }
@@ -178,12 +179,8 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
 
       // Call the onContinue prop with the selected date and time ranges
       onContinue(
-        {
-          startDate: new Date(Object.keys(selectedDates)[0]),
-          endDate: new Date(
-            Object.keys(selectedDates)[Object.keys(selectedDates).length - 1]
-          ),
-        },
+        data[0].id,
+        Object.keys(selectedDates).map((date) => new Date(date)),
         {
           start: new Date(startTime),
           end: new Date(endTime),

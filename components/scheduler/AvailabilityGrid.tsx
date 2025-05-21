@@ -1,4 +1,4 @@
-import { addMinutes, eachDayOfInterval, format, parse } from "date-fns";
+import { addMinutes, format, parse } from "date-fns";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -20,18 +20,14 @@ const MIN_CELL_HEIGHT = 40; // Minimum height for a cell
 const PADDING = 32; // Total horizontal padding (16 on each side)
 const TIME_COLUMN_WIDTH = 80; // Width of the time labels column
 
-type DateRange = {
-  startDate: Date;
-  endDate: Date;
-};
-
 type TimeRange = {
   start: Date;
   end: Date;
 };
 
 type AvailabilityGridProps = {
-  dateRange: DateRange;
+  proposalId: string;
+  selectedDates: Date[];
   timeRange: TimeRange;
   onSave: (availability: AvailabilityData) => void;
   onBack: () => void;
@@ -42,21 +38,20 @@ type AvailabilityData = {
 };
 
 export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
-  dateRange,
+  selectedDates,
   timeRange,
   onSave,
   onBack,
 }) => {
-  const [days, setDays] = useState<Date[]>([]);
   const [hours, setHours] = useState<string[]>([]);
   const [isScrolling, setIsScrolling] = useState(false);
   const [selectedCells, setSelectedCells] = useState<{
-    [key: string]: boolean;
+    [key: string]: string[];
   }>({});
 
   // Calculate dynamic cell dimensions
   const availableWidth = SCREEN_WIDTH - PADDING - TIME_COLUMN_WIDTH;
-  const numDates = days.length;
+  const numDates = selectedDates.length;
   const cellWidth = Math.max(
     MIN_CELL_WIDTH,
     numDates > 0 ? availableWidth / numDates : availableWidth
@@ -72,15 +67,6 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
   const dateScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    // Generate days in the date range
-    if (dateRange.startDate && dateRange.endDate) {
-      const daysInRange = eachDayOfInterval({
-        start: dateRange.startDate,
-        end: dateRange.endDate,
-      });
-      setDays(daysInRange);
-    }
-
     // Generate time slots based on the time range
     if (timeRange.start && timeRange.end) {
       const timeSlots: string[] = [];
@@ -93,19 +79,42 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
 
       setHours(timeSlots);
     }
-  }, [dateRange, timeRange]);
+  }, [selectedDates, timeRange]);
+
+  useEffect(() => {
+    console.log(selectedCells, "selectedCells");
+  }, [selectedCells]);
 
   const toggleCellSelection = (day: Date, hour: string) => {
-    const key = `${format(day, "yyyy-MM-dd")}-${hour}`;
-    setSelectedCells((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    console.log(day, hour, "selected");
+    const key = `${format(day, "yyyy-MM-dd")}`;
+    console.log(key);
+
+    // Initialize the array iff it doesn't exist
+    if (!selectedCells[key]) {
+      selectedCells[key] = []; // Initialize as an empty array
+      // Add the hour to the selected cells
+      setSelectedCells((prev) => ({
+        ...prev,
+        [key]: [...(prev[key] || []), hour],
+      }));
+    } else if (selectedCells[key].includes(hour)) {
+      setSelectedCells((prev) => ({
+        ...prev,
+        [key]: selectedCells[key].filter((h) => h !== hour),
+      }));
+    } else {
+      // Add the hour to the selected cells
+      setSelectedCells((prev) => ({
+        ...prev,
+        [key]: [...(prev[key] || []), hour],
+      }));
+    }
   };
 
   const isCellSelected = (day: Date, hour: string) => {
-    const key = `${format(day, "yyyy-MM-dd")}-${hour}`;
-    return selectedCells[key] || false;
+    const key = format(day, "yyyy-MM-dd");
+    return selectedCells[key] ? selectedCells[key].includes(hour) : false;
   };
 
   const handleSave = () => {
@@ -114,13 +123,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
 
     Object.keys(selectedCells).forEach((key) => {
       if (selectedCells[key]) {
-        const [dateStr, timeStr] = key.split("-");
-
-        if (!availability[dateStr]) {
-          availability[dateStr] = [];
-        }
-
-        availability[dateStr].push(timeStr);
+        availability[key] = selectedCells[key];
       }
     });
 
@@ -131,6 +134,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
       );
       return;
     }
+    console.log(availability, "availability");
 
     onSave(availability);
   };
@@ -178,7 +182,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
           scrollEnabled={false}
         >
           <View className="flex-row">
-            {days.map((date, i) => (
+            {selectedDates.map((date, i) => (
               <View
                 key={i}
                 style={{ width: cellWidth }}
@@ -221,7 +225,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
             <View>
               {hours.map((hour, hourIndex) => (
                 <View key={`hour-${hourIndex}`} className="flex-row">
-                  {days.map((day, dayIndex) => (
+                  {selectedDates.map((day, dayIndex) => (
                     <TouchableOpacity
                       key={`${dayIndex}-${hourIndex}`}
                       onPress={() => toggleCellSelection(day, hour)}
@@ -231,7 +235,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
                       }`}
                     >
                       {isCellSelected(day, hour) && (
-                        <View className="absolute inset-0 bg-blue-200 opacity-70" />
+                        <View className="absolute inset-0 bg-blue-500" />
                       )}
                     </TouchableOpacity>
                   ))}
