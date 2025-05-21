@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableHighlight,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -148,15 +149,15 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
     <View className="flex-1 bg-white">
       {/* Header with back and save buttons */}
       <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
-        <TouchableOpacity onPress={onBack} className="px-4 py-2">
+        <TouchableHighlight onPress={onBack} className="px-4 py-2">
           <Text className="text-blue-500">Back</Text>
-        </TouchableOpacity>
+        </TouchableHighlight>
 
         <Text className="text-lg font-semibold">Select Availability</Text>
 
-        <TouchableOpacity onPress={handleSave} className="px-4 py-2">
+        <TouchableHighlight onPress={handleSave} className="px-4 py-2">
           <Text className="text-blue-500">Save</Text>
-        </TouchableOpacity>
+        </TouchableHighlight>
       </View>
 
       {/* Instructions */}

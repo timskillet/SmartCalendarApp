@@ -1,4 +1,6 @@
+import { supabase } from "@/lib/supabase";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Picker } from "@react-native-picker/picker";
 import { format } from "date-fns";
 import React, { useState } from "react";
 import {
@@ -6,12 +8,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Calendar } from "react-native-calendars";
 
-type TimeIncrement = 15 | 30 | 60;
 type DateRange = {
   startDate: Date;
   endDate: Date;
@@ -28,11 +30,19 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
   onContinue,
 }) => {
   const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [durationHours, setDurationHours] = useState(0);
+  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [timezone, setTimezone] = useState("UTC");
+  const [inviteeEmails, setInviteeEmails] = useState("");
+
   const [startTime, setStartTime] = useState<Date>(new Date());
   startTime.setHours(9, 0, 0, 0);
   const [endTime, setEndTime] = useState<Date>(new Date());
   endTime.setHours(17, 0, 0, 0);
-  const [dateRange, setDateRange] = useState<DateRange[]>();
+
   const [showStartTimePicker, setShowStartTimePicker] = useState(
     Platform.OS === "ios"
   );
@@ -86,35 +96,105 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
     setSelectedDates(newSelectedDates);
   };
 
-  const handleContinue = () => {
-    if (Object.keys(selectedDates).length === 0) {
-      setError("Please select at least one date");
-      return;
-    }
+  const getTotalDurationMinutes = () => {
+    return durationHours * 60 + durationMinutes;
+  };
 
-    if (!startTime || !endTime) {
-      setError("Please select a time range");
-      return;
-    }
-
-    if (startTime >= endTime) {
-      setError("Start time must be before end time");
-      return;
-    }
-
-    // Call the onContinue prop with the selected date and time ranges
-    onContinue(
-      {
-        startDate: new Date(Object.keys(selectedDates)[0]),
-        endDate: new Date(
-          Object.keys(selectedDates)[Object.keys(selectedDates).length - 1]
-        ),
-      },
-      {
-        start: new Date(startTime),
-        end: new Date(endTime),
+  const handleSubmit = async () => {
+    try {
+      if (!title.trim()) {
+        setError("Please enter a title");
+        return;
       }
-    );
+
+      if (Object.keys(selectedDates).length === 0) {
+        setError("Please select at least one date");
+        return;
+      }
+
+      if (!startTime || !endTime) {
+        setError("Please select a time range");
+        return;
+      }
+
+      if (startTime >= endTime) {
+        setError("Start time must be before end time");
+        return;
+      }
+
+      console.log("Getting user...");
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error("User error:", userError);
+        throw userError;
+      }
+
+      if (!user) {
+        console.error("No user found");
+        throw new Error("No authenticated user found");
+      }
+
+      console.log("Processing invitees...");
+      // Convert invitee emails to array and remove empty strings
+      const inviteeList = inviteeEmails
+        .split(",")
+        .map((email) => email.trim())
+        .filter((email) => email.length > 0);
+
+      console.log("Creating event proposal object...");
+      const newEventProposal = {
+        creator_id: user.id,
+        title: title.trim(),
+        description: description.trim(),
+        proposed_dates: Object.keys(selectedDates),
+        time_range_start: format(startTime, "HH:mm:ss"),
+        time_range_end: format(endTime, "HH:mm:ss"),
+        duration_minutes: getTotalDurationMinutes(),
+        timezone: timezone,
+        invitee_ids: [user.id],
+        metadata: { category: "work" },
+      };
+
+      console.log("Event proposal object:", newEventProposal);
+
+      console.log("Inserting into database...");
+      const { data, error } = await supabase
+        .schema("api")
+        .from("event_proposals")
+        .insert([newEventProposal])
+        .select();
+
+      if (error) {
+        console.log(error);
+        console.error("Database error:", error);
+        throw error;
+      }
+
+      console.log("Successfully created event proposal:", data);
+
+      // Call the onContinue prop with the selected date and time ranges
+      onContinue(
+        {
+          startDate: new Date(Object.keys(selectedDates)[0]),
+          endDate: new Date(
+            Object.keys(selectedDates)[Object.keys(selectedDates).length - 1]
+          ),
+        },
+        {
+          start: new Date(startTime),
+          end: new Date(endTime),
+        }
+      );
+    } catch (err) {
+      console.error("Error in handleSubmit:", err);
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred"
+      );
+    }
   };
 
   return (
@@ -126,7 +206,95 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
           </View>
         )}
 
-        <Text className="text-2xl font-bold mb-8">Set Your Availability</Text>
+        <Text className="text-2xl font-bold mb-8">Create Event Proposal</Text>
+
+        <View className="mb-6">
+          <Text className="text-lg font-semibold mb-2">Event Details</Text>
+          <TextInput
+            className="bg-gray-50 p-4 rounded-lg mb-4"
+            placeholder="Event Title"
+            value={title}
+            onChangeText={setTitle}
+          />
+          <TextInput
+            className="bg-gray-50 p-4 rounded-lg mb-4"
+            placeholder="Description (optional)"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+
+        <View className="mb-6">
+          <Text className="text-lg font-semibold mb-2">Duration</Text>
+          <TouchableOpacity
+            onPress={() => setShowDurationPicker(true)}
+            className="bg-gray-50 p-4 rounded-lg"
+          >
+            <Text className="text-gray-600">
+              {durationHours > 0
+                ? `${durationHours} hour${durationHours > 1 ? "s" : ""}`
+                : ""}
+              {durationHours > 0 && durationMinutes > 0 ? " and " : ""}
+              {durationMinutes > 0 ? `${durationMinutes} minutes` : ""}
+            </Text>
+          </TouchableOpacity>
+
+          {showDurationPicker && (
+            <View className="mt-2 bg-white rounded-lg shadow-lg">
+              <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
+                <Text className="text-lg font-semibold">Select Duration</Text>
+                <TouchableOpacity
+                  onPress={() => setShowDurationPicker(false)}
+                  className="px-4 py-2"
+                >
+                  <Text className="text-blue-500">Done</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="flex-row p-4">
+                <View className="flex-1 mr-4">
+                  <Text className="text-gray-600 mb-2">Hours</Text>
+                  <Picker
+                    selectedValue={durationHours}
+                    onValueChange={(value) => setDurationHours(value)}
+                    style={{ height: 150 }}
+                  >
+                    {[...Array(13)].map((_, i) => (
+                      <Picker.Item key={i} label={`${i}`} value={i} />
+                    ))}
+                  </Picker>
+                </View>
+
+                <View className="flex-1">
+                  <Text className="text-gray-600 mb-2">Minutes</Text>
+                  <Picker
+                    selectedValue={durationMinutes}
+                    onValueChange={(value) => setDurationMinutes(value)}
+                    style={{ height: 150 }}
+                  >
+                    <Picker.Item label="00" value={0} />
+                    <Picker.Item label="15" value={15} />
+                    <Picker.Item label="30" value={30} />
+                    <Picker.Item label="45" value={45} />
+                  </Picker>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View className="mb-6">
+          <Text className="text-lg font-semibold mb-2">Invitees</Text>
+          <TextInput
+            className="bg-gray-50 p-4 rounded-lg"
+            placeholder="Enter email addresses (comma-separated)"
+            value={inviteeEmails}
+            onChangeText={setInviteeEmails}
+            multiline
+          />
+        </View>
 
         <View className="mb-8">
           <Text className="text-lg font-semibold mb-4">Time Range</Text>
@@ -184,15 +352,8 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
         </View>
 
         <View className="mb-8">
-          <Text className="text-lg font-semibold mb-4">Select Date Range</Text>
+          <Text className="text-lg font-semibold mb-4">Select Dates</Text>
           <View className="bg-gray-50 p-2 rounded-lg">
-            {/* <Text className="text-sm text-gray-600 mb-2 px-2">
-              {Object.keys(selectedDates).length > 0
-                ? `Selected Dates: ${Object.keys(selectedDates)
-                    .map((date) => format(new Date(date), "MMM d, yyyy"))
-                    .join(", ")}`
-                : "Tap to select dates"}
-            </Text> */}
             <Calendar
               onDayPress={onDayPress}
               markedDates={selectedDates}
@@ -213,10 +374,10 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
 
         <TouchableOpacity
           className="bg-blue-500 px-6 py-4 rounded-lg"
-          onPress={handleContinue}
+          onPress={handleSubmit}
         >
           <Text className="text-white font-semibold text-center text-lg">
-            Continue to Grid View
+            Create Event Proposal
           </Text>
         </TouchableOpacity>
       </View>
