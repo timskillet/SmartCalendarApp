@@ -14,11 +14,6 @@ import {
 } from "react-native";
 import { Calendar } from "react-native-calendars";
 
-type DateRange = {
-  startDate: Date;
-  endDate: Date;
-};
-
 interface AvailabilityFormProps {
   onContinue: (
     proposalId: string,
@@ -164,7 +159,7 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
 
       console.log("Inserting into database...");
       const { data, error } = await supabase
-        .schema("api")
+        .schema("public")
         .from("event_proposals")
         .insert([newEventProposal])
         .select();
@@ -177,15 +172,18 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
 
       console.log("Successfully created event proposal:", data);
 
+      // Sort the selected dates before submission
+      const sortedDates = Object.keys(selectedDates)
+        .map((dateString) => new Date(dateString)) // Convert string keys to Date objects
+        .sort((a, b) => a.getTime() - b.getTime()); // Sort by timestamp
+
+      console.log("Sorted Dates:", sortedDates);
+
       // Call the onContinue prop with the selected date and time ranges
-      onContinue(
-        data[0].id,
-        Object.keys(selectedDates).map((date) => new Date(date)),
-        {
-          start: new Date(startTime),
-          end: new Date(endTime),
-        }
-      );
+      onContinue(data[0].id, sortedDates, {
+        start: new Date(startTime),
+        end: new Date(endTime),
+      });
     } catch (err) {
       console.error("Error in handleSubmit:", err);
       setError(
