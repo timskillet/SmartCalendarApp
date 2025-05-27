@@ -324,7 +324,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
       // Delete from Supabase
       const { error } = await supabase
-        .schema("public")
+        .schema("api")
         .from("events")
         .delete()
         .eq("id", eventId);
