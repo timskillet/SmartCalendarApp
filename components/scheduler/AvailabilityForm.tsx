@@ -31,7 +31,7 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
   onContinue,
 }) => {
   const [error, setError] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState("New Event");
   const [description, setDescription] = useState("");
   const [durationHours, setDurationHours] = useState(0);
   const [durationMinutes, setDurationMinutes] = useState(30);
@@ -123,7 +123,6 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
         return;
       }
 
-      console.log("Getting user...");
       const {
         data: { user },
         error: userError,
@@ -139,14 +138,12 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
         throw new Error("No authenticated user found");
       }
 
-      console.log("Processing invitees...");
       // Convert invitee emails to array and remove empty strings
       const inviteeList = inviteeEmails
         .split(",")
         .map((email) => email.trim())
         .filter((email) => email.length > 0);
 
-      console.log("Creating event proposal object...");
       const newEventProposal = {
         creator_id: user.id,
         title: title.trim(),
@@ -160,11 +157,7 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
         metadata: { category: "work" },
       };
 
-      console.log("Event proposal object:", newEventProposal);
-
-      console.log("Inserting into database...");
       const { data, error } = await supabase
-        .schema("api")
         .from("event_proposals")
         .insert([newEventProposal])
         .select();
@@ -175,7 +168,7 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
         throw error;
       }
 
-      console.log("Successfully created event proposal:", data);
+      console.log("Event proposal created:", data[0].id);
 
       // Call the onContinue prop with the selected date and time ranges
       onContinue(

@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import { addMinutes, format, parse } from "date-fns";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -12,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { computeAvailability } from "./utils/schedulerUtils";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
@@ -38,6 +40,7 @@ type AvailabilityData = {
 };
 
 export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
+  proposalId,
   selectedDates,
   timeRange,
   onSave,
@@ -81,14 +84,8 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
     }
   }, [selectedDates, timeRange]);
 
-  useEffect(() => {
-    console.log(selectedCells, "selectedCells");
-  }, [selectedCells]);
-
   const toggleCellSelection = (day: Date, hour: string) => {
-    console.log(day, hour, "selected");
     const key = `${format(day, "yyyy-MM-dd")}`;
-    console.log(key);
 
     // Initialize the array iff it doesn't exist
     if (!selectedCells[key]) {
@@ -117,26 +114,62 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
     return selectedCells[key] ? selectedCells[key].includes(hour) : false;
   };
 
-  const handleSave = () => {
-    // Convert selected cells to the format expected by the onSave callback
-    const availability: AvailabilityData = {};
+  const handleSave = async () => {
+    try {
+      // Convert selected cells to the format expected by the onSave callback
+      const availability: AvailabilityData = {};
 
-    Object.keys(selectedCells).forEach((key) => {
-      if (selectedCells[key]) {
-        availability[key] = selectedCells[key];
+      Object.keys(selectedCells).forEach((key) => {
+        if (selectedCells[key]) {
+          availability[key] = selectedCells[key];
+        }
+      });
+
+      if (Object.keys(availability).length === 0) {
+        Alert.alert(
+          "No availability selected",
+          "Please select at least one time slot."
+        );
+        return;
       }
-    });
 
-    if (Object.keys(availability).length === 0) {
-      Alert.alert(
-        "No availability selected",
-        "Please select at least one time slot."
-      );
-      return;
+      console.log("Getting user...");
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError) {
+        console.error("User error:", userError);
+        throw userError;
+      }
+      if (!user) {
+        console.error("No user found");
+        throw new Error("No authenticated user found");
+      }
+
+      const availabilitySubmission = {
+        user_id: user.id,
+        proposal_id: proposalId,
+        availability: availability,
+        submitted_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .schema("public")
+        .from("availability_submissions")
+        .insert([availabilitySubmission])
+        .select();
+
+      if (error) {
+        console.error("Error saving availability:", error);
+      } else {
+        console.log("Availability saved successfully:", data);
+      }
+      computeAvailability(proposalId);
+      onSave(availability);
+    } catch (err) {
+      console.error("Error saving availability:", err);
     }
-    console.log(availability, "availability");
-
-    onSave(availability);
   };
 
   const handleHorizontalScroll = (

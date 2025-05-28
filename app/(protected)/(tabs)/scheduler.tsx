@@ -1,5 +1,7 @@
 import { AvailabilityForm } from "@/components/scheduler/AvailabilityForm";
 import { AvailabilityGrid } from "@/components/scheduler/AvailabilityGrid";
+import { AvailabilitySuggestions } from "@/components/scheduler/AvailabilitySuggestions";
+import { Suggestion } from "@/components/scheduler/utils/schedulerUtils";
 import React, { useState } from "react";
 import { SafeAreaView, Text, View } from "react-native";
 
@@ -13,7 +15,7 @@ type AvailabilityData = {
 };
 
 export default function SchedulerScreen() {
-  const [step, setStep] = useState<"form" | "grid">("form");
+  const [step, setStep] = useState<"form" | "grid" | "suggestions">("form");
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
   const [availability, setAvailability] = useState<AvailabilityData | null>(
@@ -36,26 +38,37 @@ export default function SchedulerScreen() {
     setStep("form");
   };
 
+  const handleSelectSuggestion = (suggestion: Suggestion) => {
+    console.log("Selected suggestion:", suggestion);
+  };
+
   const handleSaveAvailability = (availabilityData: AvailabilityData) => {
     setAvailability(availabilityData);
     // Here you would typically send this data to your backend
     console.log("Saved availability:", availabilityData);
 
-    // For demo purposes, show the form again
-    setStep("form");
+    setAvailability(availabilityData);
+
+    setStep("suggestions");
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       {step === "form" ? (
         <AvailabilityForm onContinue={handleFormContinue} />
-      ) : selectedDates && timeRange ? (
+      ) : step === "grid" && selectedDates && timeRange ? (
         <AvailabilityGrid
           proposalId={proposalId}
           selectedDates={selectedDates}
           timeRange={timeRange}
           onSave={handleSaveAvailability}
           onBack={handleGridBack}
+        />
+      ) : step === "suggestions" ? (
+        <AvailabilitySuggestions
+          proposalId={proposalId}
+          onSelectSuggestion={handleSelectSuggestion}
+          onBack={() => setStep("form")}
         />
       ) : (
         <View className="flex-1 justify-center items-center">
