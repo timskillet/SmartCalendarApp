@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import { addMinutes, format, parse } from "date-fns";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -39,6 +40,7 @@ type AvailabilityData = {
 };
 
 export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
+  proposalId,
   selectedDates,
   timeRange,
   onSave,
@@ -131,7 +133,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
         return;
       }
 
-      console.log("Getting user...");
+      // console.log("Getting user...");
       const {
         data: { user },
         error: userError,
@@ -161,9 +163,9 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
       if (error) {
         console.error("Error saving availability:", error);
       } else {
-        console.log("Availability saved successfully:", data);
+        console.log("Availability saved successfully for", data[0].proposal_id);
       }
-      computeAvailability(proposalId);
+      await computeAvailability(proposalId);
       onSave(availability);
     } catch (err) {
       console.error("Error saving availability:", err);

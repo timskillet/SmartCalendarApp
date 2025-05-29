@@ -1,8 +1,8 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import { router, Tabs } from "expo-router";
 import React from "react";
 import { Pressable, Text } from "react-native";
 import { supabase } from "../../../lib/supabase";
-
 export default function TabLayout() {
   return (
     <Tabs
@@ -14,18 +14,27 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="home" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: "Calendar",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="calendar-month" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          title: "Inbox",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="inbox" color={color} size={size} />
+          ),
         }}
       />
     </Tabs>

@@ -56,16 +56,7 @@ export async function computeAvailability(proposalId: string) {
     // Update suggestions cache
     suggestionsCache[proposalId] = suggestions;
 
-    // Insert suggestions in the background
-    supabase
-        .from('event_suggestions')
-        .insert(suggestions)
-        .then(({ error }) => {
-            if (error) {
-                console.error("Error inserting suggestions:", error);
-            }
-        });
-
+    console.log("Suggestions computed for", proposalId);
     return suggestions;
 }
 

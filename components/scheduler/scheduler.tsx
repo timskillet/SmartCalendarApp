@@ -3,7 +3,7 @@ import { AvailabilityGrid } from "@/components/scheduler/AvailabilityGrid";
 import { AvailabilitySuggestions } from "@/components/scheduler/AvailabilitySuggestions";
 import { Suggestion } from "@/components/scheduler/utils/schedulerUtils";
 import React, { useState } from "react";
-import { SafeAreaView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native";
 
 type TimeRange = {
   start: Date;
@@ -18,9 +18,6 @@ export default function SchedulerScreen() {
   const [step, setStep] = useState<"form" | "grid" | "suggestions">("form");
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
-  const [availability, setAvailability] = useState<AvailabilityData | null>(
-    null
-  );
   const [proposalId, setProposalId] = useState<string>("");
 
   const handleFormContinue = (
@@ -42,21 +39,15 @@ export default function SchedulerScreen() {
     console.log("Selected suggestion:", suggestion);
   };
 
-  const handleSaveAvailability = (availabilityData: AvailabilityData) => {
-    setAvailability(availabilityData);
-    // Here you would typically send this data to your backend
-    console.log("Saved availability:", availabilityData);
-
-    setAvailability(availabilityData);
-
+  const handleSaveAvailability = async (availabilityData: AvailabilityData) => {
     setStep("suggestions");
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      {step === "form" ? (
-        <AvailabilityForm onContinue={handleFormContinue} />
-      ) : step === "grid" && selectedDates && timeRange ? (
+      {step === "form" && <AvailabilityForm onContinue={handleFormContinue} />}
+
+      {step === "grid" && selectedDates && timeRange && (
         <AvailabilityGrid
           proposalId={proposalId}
           selectedDates={selectedDates}
@@ -64,16 +55,14 @@ export default function SchedulerScreen() {
           onSave={handleSaveAvailability}
           onBack={handleGridBack}
         />
-      ) : step === "suggestions" ? (
+      )}
+
+      {step === "suggestions" && (
         <AvailabilitySuggestions
           proposalId={proposalId}
           onSelectSuggestion={handleSelectSuggestion}
           onBack={() => setStep("form")}
         />
-      ) : (
-        <View className="flex-1 justify-center items-center">
-          <Text>Loading...</Text>
-        </View>
       )}
     </SafeAreaView>
   );
