@@ -46,7 +46,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
 }) => {
   const [currentMonth, setCurrentMonth] = useState(selectedDate);
   const [slideDirection, setSlideDirection] = useState<"left" | "right">(
-    "right"
+    "left"
   );
 
   const swipeGesture = Gesture.Pan()
@@ -91,7 +91,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
           </View>
 
           {/* Weekday headers */}
-          <View className="flex-row border-b border-gray-100 px-4">
+          <View className="flex-row border-b border-gray-100">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
               <View
                 key={day}
@@ -106,7 +106,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
           {/* Calendar grid */}
           <Animated.View
             key={currentMonth.toISOString()}
-            className="flex-1 px-4"
+            className="flex-1"
             {...(slideDirection === "left"
               ? {
                   entering: SlideInRight.duration(300),
@@ -141,26 +141,15 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                           ${
                             !isSameMonth(date, currentMonth)
                               ? "text-gray-300"
-                              : ""
-                          }
-                          ${isSameDay(date, selectedDate) ? "text-white" : ""}
-                          ${
-                            isToday(date) && !isSameDay(date, selectedDate)
+                              : isSameDay(date, selectedDate)
+                              ? "text-white"
+                              : isToday(date)
                               ? "text-blue-500"
-                              : ""
-                          }
-                          ${
-                            !isSameDay(date, selectedDate) &&
-                            !isToday(date) &&
-                            isSameMonth(date, currentMonth)
-                              ? "text-gray-900"
-                              : ""
+                              : "text-gray-900"
                           }
                         `}
                       >
-                        {isSameMonth(date, currentMonth)
-                          ? format(date, "d")
-                          : ""}
+                        {format(date, "d")}
                       </Text>
                     </View>
                     {events.some(
@@ -168,13 +157,22 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({
                         format(new Date(event.startTime), "yyyy-MM-dd") ===
                         format(date, "yyyy-MM-dd")
                     ) && (
-                      <View className="w-1 h-1 bg-blue-500 rounded-full mt-1" />
+                      <View
+                        className={`w-1 h-1 rounded-full mt-1 ${
+                          !isSameMonth(date, currentMonth)
+                            ? "bg-gray-300"
+                            : "bg-blue-500"
+                        }`}
+                      />
                     )}
                   </TouchableOpacity>
                 ))}
               </View>
             ))}
           </Animated.View>
+          <View className="flex-row justify-between items-center px-4 py-2 border-t border-gray-200">
+            <Text className="text-sm text-gray-500">Hello!</Text>
+          </View>
         </View>
       </GestureDetector>
     </GestureHandlerRootView>

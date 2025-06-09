@@ -42,7 +42,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
 }) => {
   const [currentYear, setCurrentYear] = useState(selectedDate);
   const [slideDirection, setSlideDirection] = useState<"left" | "right">(
-    "right"
+    "left"
   );
 
   const months = eachMonthOfInterval({

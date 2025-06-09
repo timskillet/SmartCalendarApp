@@ -195,9 +195,6 @@ export const AvailabilityForm: React.FC<AvailabilityFormProps> = ({
             <Text className="text-red-600 text-center">{error}</Text>
           </View>
         )}
-
-        <Text className="text-2xl font-bold mb-8">Create Event Proposal</Text>
-
         <View className="mb-6">
           <Text className="text-lg font-semibold mb-2">Event Details</Text>
           <TextInput

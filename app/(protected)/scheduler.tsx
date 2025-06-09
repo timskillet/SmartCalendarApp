@@ -2,8 +2,10 @@ import { AvailabilityForm } from "@/components/scheduler/AvailabilityForm";
 import { AvailabilityGrid } from "@/components/scheduler/AvailabilityGrid";
 import { AvailabilitySuggestions } from "@/components/scheduler/AvailabilitySuggestions";
 import { Suggestion } from "@/components/scheduler/utils/schedulerUtils";
+import { MaterialIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React, { useState } from "react";
-import { SafeAreaView } from "react-native";
+import { SafeAreaView, Text, TouchableOpacity, View } from "react-native";
 
 type TimeRange = {
   start: Date;
@@ -45,6 +47,16 @@ export default function SchedulerScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
+      <View className="flex-row items-center p-4 border-b border-gray-200">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="p-2 rounded-full"
+        >
+          <MaterialIcons name="arrow-back" size={24} color="black" />
+        </TouchableOpacity>
+        <Text className="text-xl font-semibold ml-2">Schedule Event</Text>
+      </View>
+
       {step === "form" && <AvailabilityForm onContinue={handleFormContinue} />}
 
       {step === "grid" && selectedDates && timeRange && (

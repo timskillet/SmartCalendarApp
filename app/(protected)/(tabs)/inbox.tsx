@@ -1,6 +1,13 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Mock data - replace with actual data from your backend
@@ -91,6 +98,40 @@ const Inbox = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-100">
+      <View className="flex-row items-center px-4 py-2">
+        <View className="flex-1 flex-row justify-between items-center">
+          <Text className="text-3xl font-bold text-gray-800">Inbox</Text>
+        </View>
+
+        <View className="flex-row gap-2">
+          <TouchableOpacity
+            className="w-16 h-16 rounded-full bg-blue-500/80 items-center justify-center"
+            onPress={() => {
+              router.push("/scheduler");
+            }}
+          >
+            <MaterialIcons name="add" size={24} color="white" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="w-16 h-16 rounded-full bg-green-500/80 items-center justify-center"
+            onPress={() => {
+              router.push("/inbox");
+            }}
+          >
+            <MaterialIcons name="email" size={24} color="white" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="w-16 h-16 rounded-full bg-purple-500/80 items-center justify-center"
+            onPress={() => {
+              /* Handle notification button press */
+            }}
+          >
+            <MaterialIcons name="settings" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
+      </View>
       <ScrollView className="flex-1 p-4">
         <View className="mb-6">
           <Text className="text-xl font-bold mb-4 text-gray-800">Invites</Text>

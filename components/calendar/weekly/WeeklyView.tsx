@@ -20,8 +20,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
-import { Event } from "../types";
+import { Calendar, Event } from "../types";
 import { calculateEventPosition, getHours } from "../utils/utils";
+import { CalendarList } from "./components/CalendarList";
 import { EditEventModal } from "./components/EditEventModal";
 import { EventBox } from "./components/EventBox";
 import { EventModal } from "./components/EventModal";
@@ -44,6 +45,10 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(
+    null
+  );
 
   /* EVENT CREATION*/
   const [events, setEvents] = useState<Event[]>([]);
@@ -81,6 +86,103 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
   /* CALENDAR DATA */
   const hours = getHours(dateSelected);
+
+  // Fetch user's calendars
+  useEffect(() => {
+    const fetchCalendars = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userCalendars, error } = await supabase
+        .schema("api")
+        .from("calendars")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("Error fetching calendars:", error);
+        return;
+      }
+
+      setCalendars(
+        userCalendars.map((cal) => ({
+          id: cal.id,
+          name: cal.name,
+          color: cal.color,
+          isVisible: true,
+          userId: cal.user_id,
+          createdAt: new Date(cal.created_at),
+          updatedAt: cal.updated_at ? new Date(cal.updated_at) : undefined,
+        }))
+      );
+
+      // Set default calendar if none selected
+      if (!selectedCalendarId && userCalendars.length > 0) {
+        setSelectedCalendarId(userCalendars[0].id);
+      }
+    };
+
+    fetchCalendars();
+  }, []);
+
+  // Fetch events for visible calendars
+  useEffect(() => {
+    const fetchEvents = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const visibleCalendarIds = calendars
+        .filter((cal) => cal.isVisible)
+        .map((cal) => cal.id);
+
+      if (visibleCalendarIds.length === 0) return;
+
+      const { data: calendarEvents, error } = await supabase
+        .schema("api")
+        .from("events")
+        .select("*")
+        .in("calendar_id", visibleCalendarIds);
+
+      if (error) {
+        console.error("Error fetching events:", error);
+        return;
+      }
+
+      setEvents(
+        calendarEvents.map((event) => ({
+          id: event.id,
+          calendarId: event.calendar_id,
+          title: event.title,
+          description: event.description,
+          startTime: new Date(event.start_time),
+          endTime: new Date(event.end_time),
+          position: calculateEventPosition(
+            new Date(event.start_time),
+            new Date(event.end_time)
+          ).top,
+          color:
+            calendars.find((cal) => cal.id === event.calendar_id)?.color ||
+            "#3B82F6",
+          isAllDay: event.is_all_day,
+          isTask: event.is_task,
+          completed: event.completed,
+          assignedTo: event.assigned_to,
+          isAutoScheduled: event.is_auto_scheduled,
+          createdAt: new Date(event.created_at),
+          updatedAt: event.updated_at ? new Date(event.updated_at) : undefined,
+          recurring: false, // Add proper handling for recurring events
+          timezone: event.timezone,
+          metadata: event.metadata,
+        }))
+      );
+    };
+
+    fetchEvents();
+  }, [calendars]);
 
   /* GESTURE HANDLING */
   const handleScroll = (event: any) => {
@@ -227,7 +329,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
   /* HANDLER FUNCTIONS */
   const handleSaveEvent = async (eventDetails: {
-    title?: string;
+    title: string;
     startTime: Date;
     endTime: Date;
     allDay: boolean;
@@ -241,56 +343,58 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   }) => {
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
-
-    if (userError) {
-      console.error("Error getting user:", userError);
-      return;
-    }
-    const userId = user?.id;
-    if (!userId) {
-      console.error("No authenticated user found.");
-      return;
-    }
+    if (!user || !selectedCalendarId) return;
 
     const { data, error } = await supabase
       .schema("api")
       .from("events")
       .insert([
         {
-          user_id: userId,
-          title: eventDetails.title || "New Event",
+          calendar_id: selectedCalendarId,
+          title: eventDetails.title,
           description: eventDetails.description || "",
           start_time: eventDetails.startTime.toISOString(),
           end_time: eventDetails.endTime.toISOString(),
           is_all_day: eventDetails.allDay,
-          recurrence: eventDetails.recurring,
+          is_task: false,
+          completed: false,
+          is_auto_scheduled: false,
           location: eventDetails.location || "",
-          color: eventDetails.color || "#3B82F6",
           timezone: eventDetails.timezone,
           metadata: eventDetails.metadata || {},
-          created_at: new Date().toISOString(),
         },
       ])
       .select();
 
+    if (error) {
+      console.error("Error creating event:", error);
+      return;
+    }
+
     const newEvent: Event = {
-      id: data?.[0]?.id,
+      id: data[0].id,
+      calendarId: selectedCalendarId,
       position: snappedPosition,
-      title: eventDetails.title || "New Event",
+      title: eventDetails.title,
       startTime: eventDetails.startTime,
       endTime: eventDetails.endTime,
       description: eventDetails.description || "",
       location: eventDetails.location || "",
       attendees: eventDetails.attendees || [],
       isAllDay: eventDetails.allDay,
-      color: eventDetails.color || "#3B82F6",
+      color:
+        calendars.find((cal) => cal.id === selectedCalendarId)?.color ||
+        "#3B82F6",
       recurring: eventDetails.recurring,
       timezone: eventDetails.timezone || "",
+      isTask: false,
+      completed: false,
+      isAutoScheduled: false,
+      createdAt: new Date(),
       metadata: eventDetails.metadata,
     };
-    console.log("New event created:", newEvent);
+
     setEvents([...events, newEvent]);
   };
 
@@ -348,6 +452,78 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     height: HOUR_HEIGHT,
   }));
 
+  const handleToggleCalendar = (calendarId: string) => {
+    setCalendars((prevCalendars) =>
+      prevCalendars.map((cal) =>
+        cal.id === calendarId ? { ...cal, isVisible: !cal.isVisible } : cal
+      )
+    );
+  };
+
+  const handleAddCalendar = async (
+    calendar: Omit<Calendar, "id" | "userId" | "createdAt" | "updatedAt">
+  ) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .schema("api")
+      .from("calendars")
+      .insert([
+        {
+          name: calendar.name,
+          color: calendar.color,
+          user_id: user.id,
+        },
+      ])
+      .select();
+
+    if (error) {
+      console.error("Error creating calendar:", error);
+      return;
+    }
+
+    const newCalendar: Calendar = {
+      id: data[0].id,
+      name: calendar.name,
+      color: calendar.color,
+      isVisible: true,
+      userId: user.id,
+      createdAt: new Date(data[0].created_at),
+      updatedAt: data[0].updated_at ? new Date(data[0].updated_at) : undefined,
+    };
+
+    setCalendars((prev) => [...prev, newCalendar]);
+    if (!selectedCalendarId) {
+      setSelectedCalendarId(newCalendar.id);
+    }
+  };
+
+  const handleDeleteCalendar = async (calendarId: string) => {
+    const { error } = await supabase
+      .schema("api")
+      .from("calendars")
+      .delete()
+      .eq("id", calendarId);
+
+    if (error) {
+      console.error("Error deleting calendar:", error);
+      return;
+    }
+
+    setCalendars((prev) => prev.filter((cal) => cal.id !== calendarId));
+    if (selectedCalendarId === calendarId) {
+      const remainingCalendars = calendars.filter(
+        (cal) => cal.id !== calendarId
+      );
+      setSelectedCalendarId(
+        remainingCalendars.length > 0 ? remainingCalendars[0].id : null
+      );
+    }
+  };
+
   return (
     <GestureHandlerRootView className="flex-1">
       <GestureDetector gesture={swipeGesture}>
@@ -360,6 +536,15 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
             onSelectDate={setDateSelected}
             onBackToMonthly={onBackToMonthly}
           />
+
+          {/* Calendar List */}
+          <CalendarList
+            calendars={calendars}
+            onToggleCalendar={handleToggleCalendar}
+            onAddCalendar={handleAddCalendar}
+            onDeleteCalendar={handleDeleteCalendar}
+          />
+
           {/* Time slots grid */}
           <View
             ref={gridRef}
@@ -410,6 +595,9 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     onSave={handleSaveEvent}
                     start={eventStartTime}
                     end={addHours(eventStartTime, 1)}
+                    calendars={calendars}
+                    selectedCalendarId={selectedCalendarId}
+                    onCalendarChange={setSelectedCalendarId}
                   />
                 )}
 

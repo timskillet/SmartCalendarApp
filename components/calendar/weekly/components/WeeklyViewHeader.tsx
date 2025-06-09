@@ -23,7 +23,10 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
   return (
     <View ref={headerRef} className="px-4 py-2 border-b border-gray-200">
       <View className="flex-row justify-between items-center">
-        <TouchableOpacity className="p-2" onPress={onBackToMonthly}>
+        <TouchableOpacity
+          className="p-2 rounded-full"
+          onPress={onBackToMonthly}
+        >
           <FontAwesome name="chevron-left" size={24} color="black" />
         </TouchableOpacity>
         <Text className="text-xl font-semibold">

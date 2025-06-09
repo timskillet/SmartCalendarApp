@@ -12,6 +12,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { Calendar } from "../../types";
 import { ColorPicker } from "./ColorPicker";
 
 // Import with a try-catch to handle potential missing module
@@ -41,6 +42,9 @@ interface EventModalProps {
   }) => void;
   start: Date;
   end: Date;
+  calendars: Calendar[];
+  selectedCalendarId: string | null;
+  onCalendarChange: (calendarId: string) => void;
 }
 
 // Color options with their hex values
@@ -58,6 +62,9 @@ export const EventModal: React.FC<EventModalProps> = ({
   onSave,
   start,
   end,
+  calendars,
+  selectedCalendarId,
+  onCalendarChange,
 }) => {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -169,6 +176,38 @@ export const EventModal: React.FC<EventModalProps> = ({
           <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
             <View className="bg-white rounded-xl p-5 w-[90%] max-w-[400px]">
               <Text className="text-xl font-bold mb-5">Create New Event</Text>
+
+              {/* Calendar Selection */}
+              <View className="mb-4">
+                <Text className="text-gray-600 mb-2">Calendar:</Text>
+                <View className="border border-gray-200 rounded-lg overflow-hidden">
+                  {calendars.map((calendar) => (
+                    <TouchableOpacity
+                      key={calendar.id}
+                      onPress={() => onCalendarChange(calendar.id)}
+                      className={`flex-row items-center p-3 border-b border-gray-100 ${
+                        selectedCalendarId === calendar.id
+                          ? "bg-blue-50"
+                          : "bg-white"
+                      }`}
+                    >
+                      <View
+                        className="w-4 h-4 rounded-full mr-2"
+                        style={{ backgroundColor: calendar.color }}
+                      />
+                      <Text
+                        className={`${
+                          selectedCalendarId === calendar.id
+                            ? "font-medium text-blue-600"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {calendar.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
               <TextInput
                 className="border border-gray-200 rounded-lg p-3 mb-4"

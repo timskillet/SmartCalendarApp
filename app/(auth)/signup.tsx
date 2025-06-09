@@ -17,6 +17,7 @@ export default function SignupScreen() {
       password,
     });
     if (error) {
+      console.log(error);
       alert(error.message);
     }
     setIsLoading(false);
