@@ -347,7 +347,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     if (!user || !selectedCalendarId) return;
 
     const { data, error } = await supabase
-      .schema("api")
       .from("events")
       .insert([
         {

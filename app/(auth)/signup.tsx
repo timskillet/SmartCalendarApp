@@ -12,6 +12,7 @@ export default function SignupScreen() {
 
   const handleSignup = async () => {
     setIsLoading(true);
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -20,6 +21,19 @@ export default function SignupScreen() {
       console.log(error);
       alert(error.message);
     }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      alert("Error signing up");
+      setIsLoading(false);
+      return;
+    }
+
+    // Call the calendar-signup function
+    // const response = await fetch('/functions/v1')
+
     setIsLoading(false);
   };
 
