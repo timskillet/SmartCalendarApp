@@ -34,6 +34,8 @@ interface WeeklyViewProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   onBackToMonthly: () => void;
+  selectedCalendarId?: string;
+  calendarName?: string;
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -42,13 +44,15 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   selectedDate,
   onSelectDate,
   onBackToMonthly,
+  selectedCalendarId,
+  calendarName,
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
-  const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(
-    null
-  );
+  const [selectedCalendarIdState, setSelectedCalendarIdState] = useState<
+    string | null
+  >(selectedCalendarId || null);
 
   /* EVENT CREATION*/
   const [events, setEvents] = useState<Event[]>([]);
@@ -59,6 +63,16 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [dateSelected, setDateSelected] = useState(selectedDate);
+
+  // Update selectedCalendarIdState when selectedCalendarId prop changes
+  useEffect(() => {
+    if (selectedCalendarId) {
+      setSelectedCalendarIdState(selectedCalendarId);
+      console.log(
+        `WeeklyView: Filtering events for calendar: ${calendarName} (${selectedCalendarId})`
+      );
+    }
+  }, [selectedCalendarId, calendarName]);
 
   // Measure grid position
   useEffect(() => {
@@ -96,7 +110,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       if (!user) return;
 
       const { data: userCalendars, error } = await supabase
-        .schema("api")
         .from("calendars")
         .select("*")
         .eq("user_id", user.id);
@@ -111,21 +124,21 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
           id: cal.id,
           name: cal.name,
           color: cal.color,
-          isVisible: true,
+          isVisible: selectedCalendarId ? cal.id === selectedCalendarId : true,
           userId: cal.user_id,
           createdAt: new Date(cal.created_at),
           updatedAt: cal.updated_at ? new Date(cal.updated_at) : undefined,
         }))
       );
 
-      // Set default calendar if none selected
-      if (!selectedCalendarId && userCalendars.length > 0) {
-        setSelectedCalendarId(userCalendars[0].id);
+      // Set default calendar if none selected, or use the provided selectedCalendarId
+      if (!selectedCalendarIdState && userCalendars.length > 0) {
+        setSelectedCalendarIdState(selectedCalendarId || userCalendars[0].id);
       }
     };
 
     fetchCalendars();
-  }, []);
+  }, [selectedCalendarId]);
 
   // Fetch events for visible calendars
   useEffect(() => {
@@ -135,14 +148,14 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const visibleCalendarIds = calendars
-        .filter((cal) => cal.isVisible)
-        .map((cal) => cal.id);
+      // If a specific calendar is selected from home page, only show events from that calendar
+      const visibleCalendarIds = selectedCalendarId
+        ? [selectedCalendarId]
+        : calendars.filter((cal) => cal.isVisible).map((cal) => cal.id);
 
       if (visibleCalendarIds.length === 0) return;
 
       const { data: calendarEvents, error } = await supabase
-        .schema("api")
         .from("events")
         .select("*")
         .in("calendar_id", visibleCalendarIds);
@@ -182,7 +195,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     };
 
     fetchEvents();
-  }, [calendars]);
+  }, [calendars, selectedCalendarId]);
 
   /* GESTURE HANDLING */
   const handleScroll = (event: any) => {
@@ -344,13 +357,13 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user || !selectedCalendarId) return;
+    if (!user || !selectedCalendarIdState) return;
 
     const { data, error } = await supabase
       .from("events")
       .insert([
         {
-          calendar_id: selectedCalendarId,
+          calendar_id: selectedCalendarIdState,
           title: eventDetails.title,
           description: eventDetails.description || "",
           start_time: eventDetails.startTime.toISOString(),
@@ -373,7 +386,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
     const newEvent: Event = {
       id: data[0].id,
-      calendarId: selectedCalendarId,
+      calendarId: selectedCalendarIdState,
       position: snappedPosition,
       title: eventDetails.title,
       startTime: eventDetails.startTime,
@@ -383,7 +396,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       attendees: eventDetails.attendees || [],
       isAllDay: eventDetails.allDay,
       color:
-        calendars.find((cal) => cal.id === selectedCalendarId)?.color ||
+        calendars.find((cal) => cal.id === selectedCalendarIdState)?.color ||
         "#3B82F6",
       recurring: eventDetails.recurring,
       timezone: eventDetails.timezone || "",
@@ -468,7 +481,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     if (!user) return;
 
     const { data, error } = await supabase
-      .schema("api")
       .from("calendars")
       .insert([
         {
@@ -495,8 +507,8 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     };
 
     setCalendars((prev) => [...prev, newCalendar]);
-    if (!selectedCalendarId) {
-      setSelectedCalendarId(newCalendar.id);
+    if (!selectedCalendarIdState) {
+      setSelectedCalendarIdState(newCalendar.id);
     }
   };
 
@@ -513,11 +525,11 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     }
 
     setCalendars((prev) => prev.filter((cal) => cal.id !== calendarId));
-    if (selectedCalendarId === calendarId) {
+    if (selectedCalendarIdState === calendarId) {
       const remainingCalendars = calendars.filter(
         (cal) => cal.id !== calendarId
       );
-      setSelectedCalendarId(
+      setSelectedCalendarIdState(
         remainingCalendars.length > 0 ? remainingCalendars[0].id : null
       );
     }
@@ -534,15 +546,18 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
             selectedDate={dateSelected}
             onSelectDate={setDateSelected}
             onBackToMonthly={onBackToMonthly}
+            calendarName={calendarName}
           />
 
-          {/* Calendar List */}
-          <CalendarList
-            calendars={calendars}
-            onToggleCalendar={handleToggleCalendar}
-            onAddCalendar={handleAddCalendar}
-            onDeleteCalendar={handleDeleteCalendar}
-          />
+          {/* Calendar List - Only show if no specific calendar is selected */}
+          {!selectedCalendarId && (
+            <CalendarList
+              calendars={calendars}
+              onToggleCalendar={handleToggleCalendar}
+              onAddCalendar={handleAddCalendar}
+              onDeleteCalendar={handleDeleteCalendar}
+            />
+          )}
 
           {/* Time slots grid */}
           <View
@@ -595,8 +610,8 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     start={eventStartTime}
                     end={addHours(eventStartTime, 1)}
                     calendars={calendars}
-                    selectedCalendarId={selectedCalendarId}
-                    onCalendarChange={setSelectedCalendarId}
+                    selectedCalendarId={selectedCalendarIdState}
+                    onCalendarChange={setSelectedCalendarIdState}
                   />
                 )}
 

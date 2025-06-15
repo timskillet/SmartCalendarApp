@@ -1,3 +1,4 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -56,6 +57,13 @@ const colorOptions = [
   { name: "Purple", value: "#800080" },
 ];
 
+const typeOptions = [
+  { type: "Event", icon: "event" as const },
+  { type: "Task", icon: "check-circle" as const },
+  { type: "Habit", icon: "repeat" as const },
+  { type: "Meeting", icon: "groups" as const },
+];
+
 export const EventModal: React.FC<EventModalProps> = ({
   visible,
   onClose,
@@ -79,6 +87,9 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [metadata, setMetadata] = useState({});
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [selectedColorName, setSelectedColorName] = useState("Black");
+  const [isCalendarDropdownOpen, setIsCalendarDropdownOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState("Event");
+  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
 
   useEffect(() => {
     setStartTime(start);
@@ -175,40 +186,15 @@ export const EventModal: React.FC<EventModalProps> = ({
         <View className="flex-1 bg-black/50 justify-center items-center">
           <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
             <View className="bg-white rounded-xl p-5 w-[90%] max-w-[400px]">
-              <Text className="text-xl font-bold mb-5">Create New Event</Text>
-
-              {/* Calendar Selection */}
-              <View className="mb-4">
-                <Text className="text-gray-600 mb-2">Calendar:</Text>
-                <View className="border border-gray-200 rounded-lg overflow-hidden">
-                  {calendars.map((calendar) => (
-                    <TouchableOpacity
-                      key={calendar.id}
-                      onPress={() => onCalendarChange(calendar.id)}
-                      className={`flex-row items-center p-3 border-b border-gray-100 ${
-                        selectedCalendarId === calendar.id
-                          ? "bg-blue-50"
-                          : "bg-white"
-                      }`}
-                    >
-                      <View
-                        className="w-4 h-4 rounded-full mr-2"
-                        style={{ backgroundColor: calendar.color }}
-                      />
-                      <Text
-                        className={`${
-                          selectedCalendarId === calendar.id
-                            ? "font-medium text-blue-600"
-                            : "text-gray-700"
-                        }`}
-                      >
-                        {calendar.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+              {/* Header */}
+              <View className="flex-row justify-between items-center mb-6">
+                <Text className="text-2xl font-bold mb-5">New Entry</Text>
+                <TouchableOpacity onPress={onClose}>
+                  <MaterialIcons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
               </View>
 
+              {/* Title */}
               <TextInput
                 className="border border-gray-200 rounded-lg p-3 mb-4"
                 placeholder="Event Title"
@@ -216,12 +202,123 @@ export const EventModal: React.FC<EventModalProps> = ({
                 onChangeText={setTitle}
               />
 
+              {/* Type */}
+              <View className="mb-4 relative">
+                <Text className="text-gray-600 mb-2">Type</Text>
+                <TouchableOpacity
+                  onPress={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                >
+                  <View className="flex-row items-center">
+                    <MaterialIcons
+                      name={
+                        typeOptions.find((t) => t.type === selectedType)
+                          ?.icon || "event"
+                      }
+                      size={20}
+                      color="#6B7280"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text className="text-gray-700">{selectedType}</Text>
+                  </View>
+                  <MaterialIcons
+                    name={
+                      isTypeDropdownOpen ? "arrow-drop-up" : "arrow-drop-down"
+                    }
+                    size={24}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+
+                {isTypeDropdownOpen && (
+                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                    {typeOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.type}
+                        onPress={() => {
+                          setSelectedType(option.type);
+                          setIsTypeDropdownOpen(false);
+                        }}
+                        className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                      >
+                        <MaterialIcons
+                          name={option.icon}
+                          size={20}
+                          color="#6B7280"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text className="text-gray-700">{option.type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Calendar Selection */}
+              <View className="mb-4 relative">
+                <Text className="text-gray-600 mb-2">Calendar:</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setIsCalendarDropdownOpen(!isCalendarDropdownOpen)
+                  }
+                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                >
+                  <View className="flex-row items-center">
+                    <View
+                      className="w-4 h-4 rounded-full mr-2"
+                      style={{
+                        backgroundColor:
+                          calendars.find((c) => c.id === selectedCalendarId)
+                            ?.color || "#3B82F6",
+                      }}
+                    />
+                    <Text className="text-gray-700">
+                      {calendars.find((c) => c.id === selectedCalendarId)
+                        ?.name || "Select Calendar"}
+                    </Text>
+                  </View>
+                  <MaterialIcons
+                    name={
+                      isCalendarDropdownOpen
+                        ? "arrow-drop-up"
+                        : "arrow-drop-down"
+                    }
+                    size={24}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+
+                {isCalendarDropdownOpen && (
+                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                    {calendars.map((calendar) => (
+                      <TouchableOpacity
+                        key={calendar.id}
+                        onPress={() => {
+                          onCalendarChange(calendar.id);
+                          setIsCalendarDropdownOpen(false);
+                        }}
+                        className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                      >
+                        <View
+                          className="w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: calendar.color }}
+                        />
+                        <Text className="text-gray-700">{calendar.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Location */}
               <TextInput
                 className="border border-gray-200 rounded-lg p-3 mb-4"
                 placeholder="Location"
                 value={location}
                 onChangeText={setLocation}
               />
+
+              {/* Description */}
               <TextInput
                 className="border border-gray-200 rounded-lg p-3 mb-4 min-h-[100px]"
                 placeholder="Description"
@@ -230,6 +327,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 multiline
               />
 
+              {/* Start Time */}
               <View className="flex-row items-center justify-start">
                 <Text className="text-gray-600 mb-2">Start Time:</Text>
                 <View className="p-2">
@@ -254,6 +352,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 </View>
               </View>
 
+              {/* Recurring */}
               <View className="flex-row items-center justify-start my-2">
                 <Text className="text-gray-600 mb-2">Recurring?</Text>
                 <Switch
@@ -264,6 +363,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 />
               </View>
 
+              {/* All Day */}
               <View className="flex-row items-center justify-start my-2">
                 <Text className="text-gray-600 mb-2">Is all day?</Text>
                 <Switch
@@ -274,6 +374,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 />
               </View>
 
+              {/* Color */}
               <View className="mb-4 relative">
                 <Text className="text-gray-600 mb-2">Select Color</Text>
                 <TouchableOpacity
@@ -294,6 +395,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 />
               </View>
 
+              {/* Save/Cancel Buttons */}
               <View className="flex-row justify-end mt-4">
                 <TouchableOpacity onPress={onClose} className="px-4 py-2 mr-2">
                   <Text className="text-gray-600">Cancel</Text>

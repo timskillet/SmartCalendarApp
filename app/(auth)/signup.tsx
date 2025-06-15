@@ -20,6 +20,8 @@ export default function SignupScreen() {
     if (error) {
       console.log(error);
       alert(error.message);
+      setIsLoading(false);
+      return;
     }
 
     const {
@@ -31,8 +33,8 @@ export default function SignupScreen() {
       return;
     }
 
-    // Call the calendar-signup function
-    // const response = await fetch('/functions/v1')
+    // User profile and default calendar created automatically via database trigger
+    console.log("User created successfully:", user.id);
 
     setIsLoading(false);
   };

@@ -1,12 +1,18 @@
 import { MonthlyView } from "@/components/calendar/MonthlyView";
 import { WeeklyView } from "@/components/calendar/weekly/WeeklyView";
 import { YearlyView } from "@/components/calendar/YearlyView";
-import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native";
 
 export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [view, setView] = useState<"weekly" | "monthly" | "yearly">("weekly");
+
+  // Get route parameters
+  const params = useLocalSearchParams();
+  const selectedCalendarId = params.selectedCalendarId as string | undefined;
+  const calendarName = params.calendarName as string | undefined;
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
@@ -21,6 +27,16 @@ export default function CalendarScreen() {
     setView(view);
   };
 
+  // Log the received parameters for debugging
+  useEffect(() => {
+    if (selectedCalendarId) {
+      console.log("Calendar screen received:", {
+        selectedCalendarId,
+        calendarName,
+      });
+    }
+  }, [selectedCalendarId, calendarName]);
+
   return (
     <SafeAreaView className="flex-1">
       {view === "weekly" && (
@@ -28,6 +44,8 @@ export default function CalendarScreen() {
           selectedDate={selectedDate}
           onSelectDate={handleDateSelect}
           onBackToMonthly={() => handleViewChange("monthly")}
+          selectedCalendarId={selectedCalendarId}
+          calendarName={calendarName}
         />
       )}
       {view === "monthly" && (

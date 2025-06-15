@@ -9,6 +9,7 @@ interface WeeklyViewHeaderProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   onBackToMonthly: () => void;
+  calendarName?: string;
 }
 
 export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
@@ -17,6 +18,7 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
   selectedDate,
   onSelectDate,
   onBackToMonthly,
+  calendarName,
 }) => {
   const days = getDays(selectedDate);
 
@@ -29,9 +31,14 @@ export const WeeklyViewHeader: React.FC<WeeklyViewHeaderProps> = ({
         >
           <FontAwesome name="chevron-left" size={24} color="black" />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold">
-          {format(selectedDate, "MMMM yyyy")}
-        </Text>
+        <View className="items-center">
+          <Text className="text-xl font-semibold">
+            {format(selectedDate, "MMMM yyyy")}
+          </Text>
+          {calendarName && (
+            <Text className="text-sm text-gray-600 mt-1">{calendarName}</Text>
+          )}
+        </View>
         <View className="w-12"></View>
       </View>
 
