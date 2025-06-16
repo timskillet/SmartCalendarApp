@@ -12,21 +12,16 @@ export interface Event {
     id: string;
     calendarId: string;
     title: string;
-    description?: string;
+    type: string;
     startTime: Date;
     endTime: Date;
-    position: number;
-    color: string;
-    isAllDay: boolean;
-    location?: string;
-    attendees?: string[];
-    recurring: boolean;
-    timezone?: string;
-    isTask: boolean;
     completed: boolean;
-    assignedTo?: string;
-    isAutoScheduled: boolean;
+    color: string;
+    description?: string;
+    location?: string;
+    invitees?: string[];
+    repeat: boolean;
+    position: number;
     createdAt: Date;
     updatedAt?: Date;
-    metadata?: Record<string, any>;
 }

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { MaterialIcons } from "@expo/vector-icons";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -7,6 +8,7 @@ import {
   Alert,
   Modal,
   Platform,
+  ScrollView,
   Switch,
   Text,
   TextInput,
@@ -15,7 +17,15 @@ import {
   View,
 } from "react-native";
 import { Event } from "../../types/index";
-import { ColorPicker } from "./ColorPicker";
+
+// Color options with their hex values
+const colorOptions = [
+  { name: "Red", color: "#FF0000" },
+  { name: "Blue", color: "#0000FF" },
+  { name: "Green", color: "#00FF00" },
+  { name: "Yellow", color: "#FFFF00" },
+  { name: "Purple", color: "#800080" },
+];
 
 interface EditEventModalProps {
   visible: boolean;
@@ -37,12 +47,12 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
   const [description, setDescription] = useState(event.description || "");
   const [startTime, setStartTime] = useState(event.startTime);
   const [endTime, setEndTime] = useState(event.endTime);
-  const [recurring, setRecurring] = useState(event.recurring);
-  const [allDay, setAllDay] = useState(event.isAllDay);
-  const [color, setColor] = useState(event.color);
-  const [timezone, setTimezone] = useState(event.timezone || "");
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [selectedColorName, setSelectedColorName] = useState("");
+  const [repeat, setRepeat] = useState(event.repeat || false);
+  const [color, setColor] = useState(event.color || "#000000");
+  const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
+  const [selectedColorName, setSelectedColorName] = useState(
+    colorOptions.find((c) => c.color === color)?.name || "Black"
+  );
 
   useEffect(() => {
     // Reset form when event changes
@@ -51,18 +61,15 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
     setDescription(event.description || "");
     setStartTime(event.startTime);
     setEndTime(event.endTime);
-    setRecurring(event.recurring);
-    setAllDay(event.isAllDay);
-    setColor(event.color);
-    setTimezone(event.timezone || "");
+    setRepeat(event.repeat || false);
+    setColor(event.color || "#000000");
+    setSelectedColorName(
+      colorOptions.find((c) => c.color === event.color)?.name || "Black"
+    );
   }, [event]);
 
-  const handleAllDay = () => {
-    setAllDay(!allDay);
-  };
-
   const handleRecurringChange = () => {
-    setRecurring(!recurring);
+    setRepeat(!repeat);
   };
 
   const handleStartTimeChange = (
@@ -102,6 +109,7 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
   const handleColorSelect = (colorName: string, colorValue: string) => {
     setColor(colorValue);
     setSelectedColorName(colorName);
+    setIsColorDropdownOpen(false);
   };
 
   const handleSave = async () => {
@@ -122,12 +130,9 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
           description: description || "",
           start_time: startTime.toISOString(),
           end_time: endTime.toISOString(),
-          is_all_day: allDay,
-          recurrence: recurring,
+          repeat: repeat,
           location: location || "",
           color: color,
-          timezone: timezone,
-          metadata: event.metadata || {},
           updated_at: new Date().toISOString(),
         })
         .eq("id", event.id)
@@ -144,11 +149,9 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
         description: description || "",
         startTime: startTime,
         endTime: endTime,
-        isAllDay: allDay,
-        recurring: recurring,
+        repeat: repeat,
         location: location || "",
         color: color,
-        timezone: timezone,
       };
 
       onUpdate(updatedEvent);
@@ -182,7 +185,7 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
       transparent={true}
       onRequestClose={onClose}
     >
-      <TouchableWithoutFeedback onPress={() => setShowColorPicker(false)}>
+      <TouchableWithoutFeedback onPress={onClose}>
         <View className="flex-1 bg-black/50 justify-center items-center">
           <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
             <View className="bg-white rounded-xl p-5 w-[90%] max-w-[400px]">
@@ -239,39 +242,55 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
                 <Switch
                   className="p-2"
                   thumbColor={"white"}
-                  value={recurring}
+                  value={repeat}
                   onChange={handleRecurringChange}
                 />
               </View>
 
-              <View className="flex-row items-center justify-start my-2">
-                <Text className="text-gray-600 mb-2">Is all day?</Text>
-                <Switch
-                  className="p-2"
-                  thumbColor={"white"}
-                  value={allDay}
-                  onChange={handleAllDay}
-                />
-              </View>
-
+              {/* Color Selection */}
               <View className="mb-4 relative">
-                <Text className="text-gray-600 mb-2">Select Color</Text>
+                <Text className="text-gray-600 mb-2">Color</Text>
                 <TouchableOpacity
-                  onPress={() => setShowColorPicker(true)}
-                  className="flex-row items-center border border-gray-200 rounded-lg p-2"
+                  onPress={() => setIsColorDropdownOpen(!isColorDropdownOpen)}
+                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
                 >
-                  <View
-                    className="w-6 h-6 rounded-full mr-2"
-                    style={{ backgroundColor: color }}
+                  <View className="flex-row items-center">
+                    <View
+                      className="w-4 h-4 rounded-full mr-2"
+                      style={{ backgroundColor: color }}
+                    />
+                    <Text className="text-gray-700">{selectedColorName}</Text>
+                  </View>
+                  <MaterialIcons
+                    name={
+                      isColorDropdownOpen ? "arrow-drop-up" : "arrow-drop-down"
+                    }
+                    size={24}
+                    color="#6B7280"
                   />
-                  <Text className="text-gray-800">{selectedColorName}</Text>
                 </TouchableOpacity>
-                <ColorPicker
-                  isVisible={showColorPicker}
-                  onClose={() => setShowColorPicker(false)}
-                  onSelectColor={handleColorSelect}
-                  selectedColor={color}
-                />
+
+                {isColorDropdownOpen && (
+                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50 max-h-[200px]">
+                    <ScrollView className="max-h-[200px]">
+                      {colorOptions.map((option) => {
+                        return (
+                          <TouchableOpacity
+                            key={option.name}
+                            onPress={() => setColor(option.color)}
+                            className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                          >
+                            <View
+                              className="w-4 h-4 rounded-full mr-2"
+                              style={{ backgroundColor: option.color }}
+                            />
+                            <Text className="text-gray-700">{option.name}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
               <View className="flex-row justify-between mt-4">

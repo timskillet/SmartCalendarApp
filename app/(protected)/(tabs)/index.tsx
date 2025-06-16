@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { endOfDay, startOfDay } from "date-fns";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -14,6 +15,15 @@ import { CreateCalendarModal } from "../../../components/calendar/CreateCalendar
 import { useAuth } from "../../../context/AuthProvider";
 import { supabase } from "../../../lib/supabase";
 
+// Color options with their hex values
+const colorOptions = [
+  { name: "Red", color: "#FF0000" },
+  { name: "Blue", color: "#0000FF" },
+  { name: "Green", color: "#00FF00" },
+  { name: "Yellow", color: "#FFFF00" },
+  { name: "Purple", color: "#800080" },
+];
+
 interface Calendar {
   id: string;
   name: string;
@@ -22,10 +32,31 @@ interface Calendar {
   created_at: string;
 }
 
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+  completed: boolean;
+  calendar_id: string;
+  calendar: {
+    color: string;
+  };
+}
+
 export default function HomeScreen() {
   const { signOut } = useAuth();
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [isLoadingCalendars, setIsLoadingCalendars] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+  const [selectedColor, setSelectedColor] = useState(colorOptions[0].color);
+  const [selectedColorName, setSelectedColorName] = useState(
+    colorOptions[0].name
+  );
+  const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
@@ -43,12 +74,11 @@ export default function HomeScreen() {
     });
   };
 
-  const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
-
   const handleSubmitCalendar = async (
     newCalendarName: string,
     selectedColor: string
   ) => {
+    setIsCreateModalVisible(false);
     try {
       const {
         data: { user },
@@ -111,10 +141,47 @@ export default function HomeScreen() {
     fetchCalendars();
   }, []);
 
-  const tasks = [
-    { name: "Task 1", description: "Description 1", status: "In Progress" },
-    { name: "Task 2", description: "Description 2", status: "Completed" },
-  ];
+  // Fetch today's tasks
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          console.error("No authenticated user found");
+          setIsLoadingTasks(false);
+          return;
+        }
+
+        const today = new Date();
+        const { data: todayTasks, error } = await supabase
+          .from("calendar_entries")
+          .select(
+            `
+            *,
+            calendar:calendars(color)
+          `
+          )
+          .gte("start_time", startOfDay(today).toISOString())
+          .lte("start_time", endOfDay(today).toISOString())
+          .order("start_time", { ascending: true });
+
+        if (error) {
+          console.error("Error fetching tasks:", error);
+        } else {
+          setTasks(todayTasks || []);
+        }
+      } catch (err) {
+        console.error("Error in fetchTasks:", err);
+      } finally {
+        setIsLoadingTasks(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
 
   return (
     <LinearGradient colors={["#a7f3d0", "#93c5fd"]} className="flex-1">
@@ -226,14 +293,82 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Today's tasks*/}
-          <View className="flex-row justify-between items-center px-4 py-2">
-            <Text className="text-2xl font-bold text-gray-800">
-              Today's Tasks
-            </Text>
-            <TouchableOpacity className="p-2 border border-gray-300 rounded-full">
-              <MaterialIcons name="add" size={24} color="black" />
-            </TouchableOpacity>
+          {/* Today's tasks */}
+          <View className="px-4 py-2">
+            <View className="flex-row justify-between items-center">
+              <Text className="text-2xl font-bold text-gray-800">
+                Today's Tasks
+              </Text>
+              <TouchableOpacity className="p-2 border border-gray-300 rounded-full">
+                <MaterialIcons name="add" size={24} color="black" />
+              </TouchableOpacity>
+            </View>
+
+            <View className="my-4">
+              {isLoadingTasks ? (
+                <View className="flex-row justify-center items-center py-8">
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <Text className="ml-2 text-gray-600">Loading tasks...</Text>
+                </View>
+              ) : tasks.length > 0 ? (
+                <View className="space-y-3">
+                  {tasks.map((task) => (
+                    <View
+                      key={task.id}
+                      className="bg-white p-4 rounded-lg shadow-sm"
+                      style={{
+                        borderLeftWidth: 4,
+                        borderLeftColor: task.calendar.color,
+                      }}
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-lg font-semibold flex-1">
+                          {task.title}
+                        </Text>
+                        <TouchableOpacity
+                          className={`p-2 rounded-full ${
+                            task.completed ? "bg-green-100" : "bg-gray-100"
+                          }`}
+                        >
+                          <MaterialIcons
+                            name={
+                              task.completed
+                                ? "check-circle"
+                                : "radio-button-unchecked"
+                            }
+                            size={24}
+                            color={task.completed ? "#10B981" : "#6B7280"}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      {task.description && (
+                        <Text className="text-gray-600 mt-1">
+                          {task.description}
+                        </Text>
+                      )}
+                      <Text className="text-sm text-gray-500 mt-2">
+                        {new Date(task.start_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View className="flex-row justify-center items-center py-8">
+                  <MaterialIcons name="task" size={48} color="#D1D5DB" />
+                  <View className="ml-4">
+                    <Text className="text-gray-600 text-lg font-semibold">
+                      No tasks for today
+                    </Text>
+                    <Text className="text-gray-500">
+                      Add a task to get started
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </View>
         </ScrollView>
 
@@ -242,6 +377,17 @@ export default function HomeScreen() {
             isVisible={isCreateModalVisible}
             onClose={() => setIsCreateModalVisible(false)}
             onSave={handleSubmitCalendar}
+            colorOptions={colorOptions}
+            selectedColor={selectedColor}
+            selectedColorName={selectedColorName}
+            isColorDropdownOpen={isColorDropdownOpen}
+            onColorSelect={(colorName, colorValue) => {
+              setSelectedColor(colorValue);
+              setSelectedColorName(colorName);
+            }}
+            onColorDropdownToggle={() =>
+              setIsColorDropdownOpen(!isColorDropdownOpen)
+            }
           />
         )}
       </SafeAreaView>

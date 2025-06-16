@@ -22,7 +22,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { Calendar, Event } from "../types";
 import { calculateEventPosition, getHours } from "../utils/utils";
-import { CalendarList } from "./components/CalendarList";
 import { EditEventModal } from "./components/EditEventModal";
 import { EventBox } from "./components/EventBox";
 import { EventModal } from "./components/EventModal";
@@ -50,9 +49,8 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
   const [currentWeek, setCurrentWeek] = useState(selectedDate);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
-  const [selectedCalendarIdState, setSelectedCalendarIdState] = useState<
-    string | null
-  >(selectedCalendarId || null);
+  const [selectedCalendarIdState, setSelectedCalendarIdState] =
+    useState(selectedCalendarId);
 
   /* EVENT CREATION*/
   const [events, setEvents] = useState<Event[]>([]);
@@ -156,7 +154,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       if (visibleCalendarIds.length === 0) return;
 
       const { data: calendarEvents, error } = await supabase
-        .from("events")
+        .from("calendar_entries")
         .select("*")
         .in("calendar_id", visibleCalendarIds);
 
@@ -166,31 +164,54 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       }
 
       setEvents(
-        calendarEvents.map((event) => ({
-          id: event.id,
-          calendarId: event.calendar_id,
-          title: event.title,
-          description: event.description,
-          startTime: new Date(event.start_time),
-          endTime: new Date(event.end_time),
-          position: calculateEventPosition(
-            new Date(event.start_time),
-            new Date(event.end_time)
-          ).top,
-          color:
-            calendars.find((cal) => cal.id === event.calendar_id)?.color ||
-            "#3B82F6",
-          isAllDay: event.is_all_day,
-          isTask: event.is_task,
-          completed: event.completed,
-          assignedTo: event.assigned_to,
-          isAutoScheduled: event.is_auto_scheduled,
-          createdAt: new Date(event.created_at),
-          updatedAt: event.updated_at ? new Date(event.updated_at) : undefined,
-          recurring: false, // Add proper handling for recurring events
-          timezone: event.timezone,
-          metadata: event.metadata,
-        }))
+        calendarEvents.map((event) => {
+          // Create dates in local timezone
+          const startTime = new Date(event.start_time);
+          const endTime = new Date(event.end_time);
+
+          // Adjust for timezone offset to ensure correct local time display
+          const localStartTime = new Date(
+            startTime.getFullYear(),
+            startTime.getMonth(),
+            startTime.getDate(),
+            startTime.getHours(),
+            startTime.getMinutes(),
+            0,
+            0
+          );
+
+          const localEndTime = new Date(
+            endTime.getFullYear(),
+            endTime.getMonth(),
+            endTime.getDate(),
+            endTime.getHours(),
+            endTime.getMinutes(),
+            0,
+            0
+          );
+
+          return {
+            id: event.id,
+            calendarId: event.calendar_id,
+            title: event.title,
+            type: event.type,
+            startTime: localStartTime,
+            endTime: localEndTime,
+            completed: event.completed,
+            color:
+              calendars.find((cal) => cal.id === event.calendar_id)?.color ||
+              "#3B82F6",
+            description: event.description,
+            location: event.location,
+            invitees: event.invitees,
+            position: calculateEventPosition(localStartTime, localEndTime).top,
+            repeat: false,
+            createdAt: new Date(event.created_at),
+            updatedAt: event.updated_at
+              ? new Date(event.updated_at)
+              : undefined,
+          };
+        })
       );
     };
 
@@ -263,7 +284,9 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
             dateSelected.getMonth(),
             dateSelected.getDate(),
             hour,
-            minutes
+            minutes,
+            0, // Set seconds to 0
+            0 // Set milliseconds to 0
           );
           setDraggableBoxTime(format(selectedTime, "HH:mm"));
           setEventStartTime(selectedTime);
@@ -317,7 +340,9 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
         dateSelected.getMonth(),
         dateSelected.getDate(),
         hour,
-        minutes
+        minutes,
+        0, // Set seconds to 0
+        0 // Set milliseconds to 0
       );
       setDraggableBoxTime(format(selectedTime, "HH:mm"));
       setEventStartTime(selectedTime);
@@ -342,39 +367,67 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
   /* HANDLER FUNCTIONS */
   const handleSaveEvent = async (eventDetails: {
+    calendarId: string;
     title: string;
+    type: string;
     startTime: Date;
     endTime: Date;
-    allDay: boolean;
+    completed: boolean;
+    color: string;
     description?: string;
     location?: string;
-    attendees?: string[];
-    recurring: boolean;
-    color: string;
-    timezone?: string;
-    metadata?: Record<string, any>;
+    invitees?: string[];
+    repeat: boolean;
   }) => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user || !selectedCalendarIdState) return;
 
+    // Create new Date objects with explicit timezone handling
+    const startTime = new Date(
+      eventDetails.startTime.getFullYear(),
+      eventDetails.startTime.getMonth(),
+      eventDetails.startTime.getDate(),
+      eventDetails.startTime.getHours(),
+      eventDetails.startTime.getMinutes(),
+      0,
+      0
+    );
+
+    const endTime = new Date(
+      eventDetails.endTime.getFullYear(),
+      eventDetails.endTime.getMonth(),
+      eventDetails.endTime.getDate(),
+      eventDetails.endTime.getHours(),
+      eventDetails.endTime.getMinutes(),
+      0,
+      0
+    );
+
+    // Convert to UTC for storage
+    const utcStartTime = new Date(
+      startTime.getTime() - startTime.getTimezoneOffset() * 60000
+    );
+    const utcEndTime = new Date(
+      endTime.getTime() - endTime.getTimezoneOffset() * 60000
+    );
+
     const { data, error } = await supabase
-      .from("events")
+      .from("calendar_entries")
       .insert([
         {
           calendar_id: selectedCalendarIdState,
           title: eventDetails.title,
-          description: eventDetails.description || "",
-          start_time: eventDetails.startTime.toISOString(),
-          end_time: eventDetails.endTime.toISOString(),
-          is_all_day: eventDetails.allDay,
-          is_task: false,
+          type: eventDetails.type,
+          start_time: utcStartTime.toISOString(),
+          end_time: utcEndTime.toISOString(),
           completed: false,
-          is_auto_scheduled: false,
+          color: eventDetails.color,
+          description: eventDetails.description || "",
           location: eventDetails.location || "",
-          timezone: eventDetails.timezone,
-          metadata: eventDetails.metadata || {},
+          invitees: eventDetails.invitees || [],
+          repeat: eventDetails.repeat || false,
         },
       ])
       .select();
@@ -387,24 +440,20 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     const newEvent: Event = {
       id: data[0].id,
       calendarId: selectedCalendarIdState,
-      position: snappedPosition,
       title: eventDetails.title,
-      startTime: eventDetails.startTime,
-      endTime: eventDetails.endTime,
-      description: eventDetails.description || "",
-      location: eventDetails.location || "",
-      attendees: eventDetails.attendees || [],
-      isAllDay: eventDetails.allDay,
+      type: eventDetails.type,
+      startTime,
+      endTime,
+      completed: false,
       color:
         calendars.find((cal) => cal.id === selectedCalendarIdState)?.color ||
         "#3B82F6",
-      recurring: eventDetails.recurring,
-      timezone: eventDetails.timezone || "",
-      isTask: false,
-      completed: false,
-      isAutoScheduled: false,
+      description: eventDetails.description || "",
+      location: eventDetails.location || "",
+      invitees: eventDetails.invitees || [],
+      repeat: eventDetails.repeat,
+      position: snappedPosition,
       createdAt: new Date(),
-      metadata: eventDetails.metadata,
     };
 
     setEvents([...events, newEvent]);
@@ -440,8 +489,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
 
       // Delete from Supabase
       const { error } = await supabase
-        .schema("api")
-        .from("events")
+        .from("calendar_entries")
         .delete()
         .eq("id", eventId);
 
@@ -459,10 +507,13 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     }
   };
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    height: HOUR_HEIGHT,
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    "worklet";
+    return {
+      transform: [{ translateY: translateY.value }],
+      height: HOUR_HEIGHT,
+    };
+  });
 
   const handleToggleCalendar = (calendarId: string) => {
     setCalendars((prevCalendars) =>
@@ -529,9 +580,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       const remainingCalendars = calendars.filter(
         (cal) => cal.id !== calendarId
       );
-      setSelectedCalendarIdState(
-        remainingCalendars.length > 0 ? remainingCalendars[0].id : null
-      );
+      setSelectedCalendarIdState(remainingCalendars[0].id);
     }
   };
 
@@ -548,16 +597,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
             onBackToMonthly={onBackToMonthly}
             calendarName={calendarName}
           />
-
-          {/* Calendar List - Only show if no specific calendar is selected */}
-          {!selectedCalendarId && (
-            <CalendarList
-              calendars={calendars}
-              onToggleCalendar={handleToggleCalendar}
-              onAddCalendar={handleAddCalendar}
-              onDeleteCalendar={handleDeleteCalendar}
-            />
-          )}
 
           {/* Time slots grid */}
           <View
@@ -610,7 +649,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     start={eventStartTime}
                     end={addHours(eventStartTime, 1)}
                     calendars={calendars}
-                    selectedCalendarId={selectedCalendarIdState}
+                    selectedCalendarId={selectedCalendarIdState || ""}
                     onCalendarChange={setSelectedCalendarIdState}
                   />
                 )}

@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { Text, TouchableOpacity, View } from "react-native";
 import { Event } from "../../types/index";
+
 interface EventBoxProps {
   event: Event;
   top: number;
@@ -14,6 +15,10 @@ export const EventBox: React.FC<EventBoxProps> = ({
   height,
   handleEventPress,
 }) => {
+  // Convert UTC times to local time for display
+  const localStartTime = new Date(event.startTime);
+  const localEndTime = new Date(event.endTime);
+
   return (
     <TouchableOpacity
       key={`${event.title}-${event.startTime.toISOString()}`}
@@ -46,8 +51,7 @@ export const EventBox: React.FC<EventBoxProps> = ({
         <View className="p-2">
           <Text className="text-sm font-medium">{event.title}</Text>
           <Text className="text-xs">
-            {format(event.startTime, "HH:mm")} -{" "}
-            {format(event.endTime, "HH:mm")}
+            {format(localStartTime, "HH:mm")} - {format(localEndTime, "HH:mm")}
           </Text>
         </View>
       </View>
