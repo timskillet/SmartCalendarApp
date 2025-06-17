@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
@@ -6,6 +7,8 @@ interface Calendar {
   name: string;
   color: string;
   is_primary: boolean;
+  is_shared?: boolean;
+  permission?: "view" | "edit" | "copy";
 }
 
 interface CalendarContextType {
@@ -15,6 +18,7 @@ interface CalendarContextType {
   setSelectedCalendar: (calendarId: string) => void;
   setCalendars: (calendars: Calendar[]) => void;
   clearSelection: () => void;
+  refreshCalendars: () => Promise<void>;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(
@@ -32,6 +36,67 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
   const selectedCalendar =
     calendars.find((cal) => cal.id === selectedCalendarId) || null;
 
+  const fetchCalendars = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch owned calendars
+      const { data: ownedCalendars, error: ownedError } = await supabase
+        .from("calendars")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (ownedError) throw ownedError;
+
+      // Fetch shared calendars
+      const { data: sharedCalendars, error: sharedError } = await supabase
+        .from("calendar_shares")
+        .select(
+          `
+          permission,
+          calendars (
+            id,
+            name,
+            color,
+            is_primary
+          )
+        `
+        )
+        .eq("shared_with", user.id);
+
+      if (sharedError) throw sharedError;
+
+      // Transform shared calendars data
+      const transformedSharedCalendars = sharedCalendars.map((share) => ({
+        ...share.calendars,
+        is_shared: true,
+        permission: share.permission,
+      }));
+
+      // Combine owned and shared calendars
+      const allCalendars = [
+        ...(ownedCalendars || []),
+        ...transformedSharedCalendars,
+      ];
+
+      setCalendars(allCalendars);
+
+      // If no calendar is selected, select the primary calendar
+      if (!selectedCalendarId) {
+        const primaryCalendar = allCalendars.find((cal) => cal.is_primary);
+        if (primaryCalendar) {
+          setSelectedCalendarId(primaryCalendar.id);
+          await AsyncStorage.setItem("selectedCalendarId", primaryCalendar.id);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching calendars:", error);
+    }
+  };
+
   // Load persisted selection on app start
   useEffect(() => {
     const loadSelection = async () => {
@@ -47,6 +112,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
     loadSelection();
+    fetchCalendars();
   }, []);
 
   const setSelectedCalendar = async (calendarId: string) => {
@@ -76,6 +142,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
         setSelectedCalendar,
         setCalendars,
         clearSelection,
+        refreshCalendars: fetchCalendars,
       }}
     >
       {children}

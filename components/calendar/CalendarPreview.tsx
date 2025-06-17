@@ -46,10 +46,10 @@ const CalendarPreview: React.FC<CalendarPreviewProps> = ({
       </View>
 
       {/* Weekday headers */}
-      <View className="flex-row justify-between">
+      <View className="flex-row justify-center">
         {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
           <View key={idx} className="flex-1 items-center">
-            <Text className="text-gray-500 text-sm">{day}</Text>
+            <Text className="text-gray-500 text-sm font-bold">{day}</Text>
           </View>
         ))}
       </View>
@@ -57,7 +57,7 @@ const CalendarPreview: React.FC<CalendarPreviewProps> = ({
       {/* Calendar grid */}
       <View className="flex-1">
         {weeks.map((week, weekIndex) => (
-          <View key={weekIndex} className="flex-row justify-between">
+          <View key={weekIndex} className="flex-row justify-center">
             {week.map((date, idx) => (
               <TouchableOpacity
                 key={idx}

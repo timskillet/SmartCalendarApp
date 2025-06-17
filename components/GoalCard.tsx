@@ -51,16 +51,22 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onPress }) => {
     switch (goal.type) {
       case "habit":
         return (
-          <MaterialIcons name="check-circle" size={20} color={goal.iconColor} />
+          <MaterialIcons
+            name="local-fire-department"
+            size={20}
+            color={"orange"}
+          />
         );
       case "numeric":
-        return <MaterialIcons name="home" size={20} color={goal.iconColor} />;
+        return (
+          <MaterialIcons name="trending-up" size={20} color={"lightblue"} />
+        );
       case "checklist":
         return (
-          <MaterialIcons name="check-box" size={20} color={goal.iconColor} />
+          <MaterialIcons name="check-box" size={20} color={"lightgreen"} />
         );
       case "time":
-        return <Ionicons name="bar-chart" size={20} color={goal.iconColor} />;
+        return <Ionicons name="bar-chart" size={20} color={"blue"} />;
     }
   };
 
@@ -80,9 +86,9 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onPress }) => {
               ${goal.current.toLocaleString()} of $
               {goal.target.toLocaleString()}
             </Text>
-            <View className="h-1.5 w-20 bg-gray-200 rounded-full overflow-hidden">
+            <View className="h-1.5 w-20 bg-gray-200 rounded-xl overflow-hidden">
               <View
-                className="h-1.5 bg-blue-500 rounded-full"
+                className="h-1.5 bg-blue-500 rounded-xl"
                 style={{
                   width: `${Math.round((goal.current / goal.target) * 100)}%`,
                 }}
@@ -144,14 +150,14 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onPress }) => {
   };
 
   return (
-    <View className="bg-white rounded-xl p-3 shadow-sm border border-gray-200 h-[140px] w-[160px]">
-      <View className="flex-row items-center mb-1">
+    <View className="bg-white rounded-xl m-1 p-4 shadow-sm border border-gray-200 h-[160px]">
+      <View className="flex-row items-center mb-2">
         {renderGoalIcon()}
         <Text className="ml-1.5 text-sm font-semibold flex-1" numberOfLines={1}>
           {goal.title}
         </Text>
       </View>
-      <Text className="text-gray-500 text-xs mb-1.5" numberOfLines={1}>
+      <Text className="text-gray-500 text-xs mb-3" numberOfLines={1}>
         {goal.subtitle}
       </Text>
       {renderGoalContent()}

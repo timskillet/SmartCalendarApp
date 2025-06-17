@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { User } from "@supabase/supabase-js";
 import { endOfDay, startOfDay } from "date-fns";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -30,6 +31,29 @@ interface Calendar {
   color: string;
   is_primary: boolean;
   created_at: string;
+  user_id: string;
+  is_shared?: boolean;
+  shared_by?: {
+    email: string;
+  };
+  user?: {
+    email: string;
+  };
+}
+
+interface CalendarShare {
+  calendar_id: string;
+  calendar: {
+    id: string;
+    name: string;
+    color: string;
+    is_primary: boolean;
+    created_at: string;
+    user_id: string;
+    user: {
+      email: string;
+    };
+  } | null;
 }
 
 interface Task {
@@ -57,7 +81,7 @@ export default function HomeScreen() {
     colorOptions[0].name
   );
   const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
-
+  const [user, setUser] = useState<User | null>(null);
   const handleLogout = async () => {
     await signOut();
     router.replace("/(auth)/login");
@@ -66,7 +90,7 @@ export default function HomeScreen() {
   const handleCalendarPress = (calendar: Calendar) => {
     // Navigate to calendar tab with the specific calendar ID
     router.push({
-      pathname: "/(protected)/(tabs)/calendar",
+      pathname: "/(protected)/(tabs)/dashboard",
       params: {
         selectedCalendarId: calendar.id,
         calendarName: calendar.name,
@@ -106,6 +130,17 @@ export default function HomeScreen() {
     }
   };
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      setUser(user);
+    };
+    fetchUser();
+  }, []);
+
   // Fetch user's calendars
   useEffect(() => {
     const fetchCalendars = async () => {
@@ -120,17 +155,90 @@ export default function HomeScreen() {
           return;
         }
 
-        const { data: userCalendars, error } = await supabase
+        setIsLoadingCalendars(true);
+
+        // First, get all calendar shares for this user
+        const { data: shares, error: sharesError } = (await supabase
+          .from("calendar_shares")
+          .select(
+            `
+            calendar_id,
+            calendar:calendars (
+              id,
+              name,
+              color,
+              is_primary,
+              created_at,
+              user_id,
+              user:user_id (
+                email
+              )
+            )
+          `
+          )
+          .eq("shared_with", user.id)) as {
+          data: CalendarShare[] | null;
+          error: any;
+        };
+
+        console.log("Calendar shares with details:", shares);
+
+        if (sharesError) {
+          console.error("Error fetching shares:", sharesError);
+          return;
+        }
+
+        // Get owned calendars
+        const { data: ownedCalendars, error: ownedError } = await supabase
           .from("calendars")
-          .select("*")
+          .select(
+            `
+            *,
+            user:user_id (
+              email
+            )
+          `
+          )
           .eq("user_id", user.id)
           .order("created_at", { ascending: true });
 
-        if (error) {
-          console.error("Error fetching calendars:", error);
-        } else {
-          setCalendars(userCalendars || []);
+        console.log("Owned calendars:", ownedCalendars);
+
+        if (ownedError) {
+          console.error("Error fetching owned calendars:", ownedError);
+          return;
         }
+
+        // Format owned calendars
+        const formattedOwnedCalendars = (ownedCalendars || []).map(
+          (calendar) => ({
+            ...calendar,
+            is_shared: false,
+          })
+        );
+
+        // Format shared calendars
+        const formattedSharedCalendars = (shares || [])
+          .filter((share) => share.calendar) // Filter out any null calendars
+          .map((share) => ({
+            ...share.calendar!,
+            is_shared: true,
+            shared_by: {
+              email: share.calendar!.user?.email || "Unknown User",
+            },
+          }));
+
+        console.log("Formatted owned calendars:", formattedOwnedCalendars);
+        console.log("Formatted shared calendars:", formattedSharedCalendars);
+
+        // Combine both types of calendars
+        const allCalendars = [
+          ...formattedOwnedCalendars,
+          ...formattedSharedCalendars,
+        ];
+        console.log("Final combined calendars:", allCalendars);
+
+        setCalendars(allCalendars);
       } catch (err) {
         console.error("Error in fetchCalendars:", err);
       } finally {
@@ -225,9 +333,9 @@ export default function HomeScreen() {
               ) : calendars.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View className="flex-row gap-4">
-                    {calendars.map((calendar) => (
+                    {calendars.map((calendar, idx) => (
                       <TouchableOpacity
-                        key={calendar.id}
+                        key={idx}
                         className="p-4 bg-white rounded-lg min-w-[150px] shadow-sm"
                         style={{
                           borderLeftWidth: 4,
@@ -256,8 +364,11 @@ export default function HomeScreen() {
                           )}
                         </View>
                         <Text className="text-sm text-gray-500">
-                          Created{" "}
-                          {new Date(calendar.created_at).toLocaleDateString()}
+                          {calendar.is_shared
+                            ? `Shared by ${calendar.shared_by?.email}`
+                            : `Created ${new Date(
+                                calendar.created_at
+                              ).toLocaleDateString()}`}
                         </Text>
                         <View className="flex-row items-center mt-2">
                           <MaterialIcons

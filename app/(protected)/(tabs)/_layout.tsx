@@ -29,11 +29,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="calendar"
+        name="dashboard"
         options={{
-          title: "Calendar",
+          title: "Dash",
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="calendar-month" color={color} size={size} />
+            <MaterialIcons name="bar-chart" color={color} size={size} />
           ),
         }}
       />
