@@ -181,8 +181,6 @@ export default function HomeScreen() {
           error: any;
         };
 
-        console.log("Calendar shares with details:", shares);
-
         if (sharesError) {
           console.error("Error fetching shares:", sharesError);
           return;
@@ -201,8 +199,6 @@ export default function HomeScreen() {
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: true });
-
-        console.log("Owned calendars:", ownedCalendars);
 
         if (ownedError) {
           console.error("Error fetching owned calendars:", ownedError);
@@ -228,15 +224,11 @@ export default function HomeScreen() {
             },
           }));
 
-        console.log("Formatted owned calendars:", formattedOwnedCalendars);
-        console.log("Formatted shared calendars:", formattedSharedCalendars);
-
         // Combine both types of calendars
         const allCalendars = [
           ...formattedOwnedCalendars,
           ...formattedSharedCalendars,
         ];
-        console.log("Final combined calendars:", allCalendars);
 
         setCalendars(allCalendars);
       } catch (err) {

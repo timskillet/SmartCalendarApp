@@ -1,6 +1,10 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Redirect, Slot } from "expo-router";
 import { Text } from "react-native";
 import { useAuth } from "../../context/AuthProvider";
+import { CalendarProvider } from "../../context/CalendarProvider";
+
+const queryClient = new QueryClient();
 
 export default function ProtectedLayout() {
   const { session, isLoading } = useAuth();
@@ -13,5 +17,11 @@ export default function ProtectedLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  return <Slot />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <CalendarProvider>
+        <Slot />
+      </CalendarProvider>
+    </QueryClientProvider>
+  );
 }

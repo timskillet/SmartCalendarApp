@@ -289,7 +289,7 @@ const Inbox = () => {
           <TouchableOpacity
             className="w-16 h-16 rounded-full bg-blue-500/80 items-center justify-center"
             onPress={() => {
-              router.push("/scheduler");
+              router.push("/scheduler_form");
             }}
           >
             <MaterialIcons name="add" size={24} color="white" />

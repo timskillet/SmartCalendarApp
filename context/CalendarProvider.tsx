@@ -1,6 +1,8 @@
-import { supabase } from "@/lib/supabase";
+import { fetchUserCalendars } from "@/services/CalendarService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQuery } from "@tanstack/react-query";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Text } from "react-native";
 
 interface Calendar {
   id: string;
@@ -12,6 +14,9 @@ interface Calendar {
 }
 
 interface CalendarContextType {
+  editableCalendars: Calendar[];
+  viewableCalendars: Calendar[];
+  copyableCalendars: Calendar[];
   selectedCalendarId: string | null;
   selectedCalendar: Calendar | null;
   calendars: Calendar[];
@@ -31,71 +36,31 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(
     null
   );
+  const [editableCalendars, setEditableCalendars] = useState<Calendar[]>([]);
+  const [viewableCalendars, setViewableCalendars] = useState<Calendar[]>([]);
+  const [copyableCalendars, setCopyableCalendars] = useState<Calendar[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["user-calendars"],
+    queryFn: fetchUserCalendars,
+  });
+
+  useEffect(() => {
+    if (data) {
+      setEditableCalendars(data.editableCalendars);
+      setViewableCalendars(data.viewableCalendars);
+      setCopyableCalendars(data.copyableCalendars);
+      setCalendars([
+        ...data.editableCalendars,
+        ...data.viewableCalendars,
+        ...data.copyableCalendars,
+      ]);
+    }
+  }, [data]);
 
   const selectedCalendar =
     calendars.find((cal) => cal.id === selectedCalendarId) || null;
-
-  const fetchCalendars = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch owned calendars
-      const { data: ownedCalendars, error: ownedError } = await supabase
-        .from("calendars")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (ownedError) throw ownedError;
-
-      // Fetch shared calendars
-      const { data: sharedCalendars, error: sharedError } = await supabase
-        .from("calendar_shares")
-        .select(
-          `
-          permission,
-          calendars (
-            id,
-            name,
-            color,
-            is_primary
-          )
-        `
-        )
-        .eq("shared_with", user.id);
-
-      if (sharedError) throw sharedError;
-
-      // Transform shared calendars data
-      const transformedSharedCalendars = sharedCalendars.map((share) => ({
-        ...share.calendars,
-        is_shared: true,
-        permission: share.permission,
-      }));
-
-      // Combine owned and shared calendars
-      const allCalendars = [
-        ...(ownedCalendars || []),
-        ...transformedSharedCalendars,
-      ];
-
-      setCalendars(allCalendars);
-
-      // If no calendar is selected, select the primary calendar
-      if (!selectedCalendarId) {
-        const primaryCalendar = allCalendars.find((cal) => cal.is_primary);
-        if (primaryCalendar) {
-          setSelectedCalendarId(primaryCalendar.id);
-          await AsyncStorage.setItem("selectedCalendarId", primaryCalendar.id);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching calendars:", error);
-    }
-  };
 
   // Load persisted selection on app start
   useEffect(() => {
@@ -112,7 +77,6 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
     loadSelection();
-    fetchCalendars();
   }, []);
 
   const setSelectedCalendar = async (calendarId: string) => {
@@ -133,16 +97,29 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const refreshCalendars = async () => {
+    await refetch();
+  };
+
+  if (isLoading) {
+    return (
+      <Text className="flex-1 items-center justify-center">Loading...</Text>
+    );
+  }
+
   return (
     <CalendarContext.Provider
       value={{
+        editableCalendars,
+        viewableCalendars,
+        copyableCalendars,
         selectedCalendarId,
         selectedCalendar,
         calendars,
         setSelectedCalendar,
         setCalendars,
         clearSelection,
-        refreshCalendars: fetchCalendars,
+        refreshCalendars,
       }}
     >
       {children}

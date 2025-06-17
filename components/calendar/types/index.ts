@@ -1,11 +1,10 @@
 export interface Calendar {
     id: string;
+    user_id: string;
     name: string;
     color: string;
-    isVisible: boolean;
-    userId: string;
+    is_primary: boolean;
     createdAt: Date;
-    updatedAt?: Date;
 }
 
 export interface Event {

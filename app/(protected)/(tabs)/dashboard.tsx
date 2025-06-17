@@ -2,11 +2,13 @@ import GoalCard from "@/components/GoalCard";
 import CalendarPreview from "@/components/calendar/CalendarPreview";
 import { ShareCalendarModal } from "@/components/calendar/ShareCalendarModal";
 import { Calendar } from "@/components/calendar/types";
-import { supabase } from "@/lib/supabase";
+import { useCalendar } from "@/context/CalendarProvider";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  FlatList,
+  Modal,
   SafeAreaView,
   ScrollView,
   Text,
@@ -137,38 +139,58 @@ const fakeEvents: Array<{
 
 const dashboard = () => {
   const params = useLocalSearchParams();
-  const selectedCalendarId = params.selectedCalendarId as string;
-  const calendarName = params.calendarName as string | undefined;
-  const [calendar, setCalendar] = useState<Calendar | null>(null);
+  const { calendars, selectedCalendar, setSelectedCalendar } = useCalendar();
+  const [isCalendarModalVisible, setIsCalendarModalVisible] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
 
   useEffect(() => {
-    const fetchCalendars = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: userCalendars, error } = await supabase
-        .from("calendars")
-        .select("*")
-        .eq("id", selectedCalendarId);
-
-      if (error) {
-        console.error("Error fetching calendars:", error);
-        return;
+    // If no calendar is selected, select the primary calendar
+    if (!selectedCalendar && calendars.length > 0) {
+      const primaryCalendar = calendars.find((cal) => cal.is_primary);
+      if (primaryCalendar) {
+        setSelectedCalendar(primaryCalendar.id);
+      } else {
+        // If no primary calendar, select the first one
+        setSelectedCalendar(calendars[0].id);
       }
-      setCalendar(userCalendars[0]);
-    };
+    }
+    console.log("Available calendars:", calendars);
+  }, [calendars, selectedCalendar]);
 
-    fetchCalendars();
-  }, [selectedCalendarId]);
+  const renderCalendarItem = ({ item }: { item: Calendar }) => (
+    <TouchableOpacity
+      onPress={() => {
+        setSelectedCalendar(item.id);
+        setIsCalendarModalVisible(false);
+      }}
+      className="p-4 border-b border-gray-200"
+    >
+      <View className="flex-row items-center">
+        <View
+          className="w-4 h-4 rounded-full mr-3"
+          style={{ backgroundColor: item.color }}
+        />
+        <Text className="text-lg">{item.name}</Text>
+        {item.is_primary && (
+          <Text className="text-sm text-gray-500 ml-2">(Primary)</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView className="flex-1">
       <View className="flex-1 px-4">
         <View className="flex-row justify-between items-center">
-          <Text className="text-2xl font-bold">{calendarName}</Text>
+          <TouchableOpacity
+            onPress={() => setIsCalendarModalVisible(true)}
+            className="flex-row items-center"
+          >
+            <Text className="text-2xl font-bold mr-2">
+              {selectedCalendar?.name || "Select Calendar"}
+            </Text>
+            <MaterialIcons name="arrow-drop-down" size={24} color="black" />
+          </TouchableOpacity>
           <View className="flex-row gap-5">
             <TouchableOpacity onPress={() => setIsShareModalVisible(true)}>
               <MaterialIcons name="send" size={24} color="black" />
@@ -181,6 +203,42 @@ const dashboard = () => {
             </TouchableOpacity>
           </View>
         </View>
+
+        <Modal
+          visible={isCalendarModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setIsCalendarModalVisible(false)}
+        >
+          <View className="flex-1 bg-black/50">
+            <View className="bg-white mt-20 mx-4 rounded-xl">
+              <View className="p-4 border-b border-gray-200">
+                <Text className="text-xl font-bold">Select Calendar</Text>
+              </View>
+              {calendars.length === 0 ? (
+                <View className="p-4">
+                  <Text className="text-gray-500 text-center">
+                    No calendars available
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={calendars as Array<Calendar>}
+                  renderItem={renderCalendarItem}
+                  keyExtractor={(item) => item.id}
+                />
+              )}
+              <TouchableOpacity
+                onPress={() => setIsCalendarModalVisible(false)}
+                className="p-4 border-t border-gray-200"
+              >
+                <Text className="text-center text-blue-500 font-semibold">
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
           {/* Calendar */}
@@ -262,8 +320,8 @@ const dashboard = () => {
         <ShareCalendarModal
           isVisible={isShareModalVisible}
           onClose={() => setIsShareModalVisible(false)}
-          calendarId={selectedCalendarId}
-          calendarName={calendarName || "Calendar"}
+          calendarId={selectedCalendar?.id || ""}
+          calendarName={selectedCalendar?.name || "Calendar"}
         />
       </View>
     </SafeAreaView>

@@ -128,6 +128,7 @@ export const ShareCalendarModal: React.FC<ShareCalendarModalProps> = ({
 
       setSuccess("Calendar shared successfully!");
       setEmail("");
+      onClose();
     } catch (err) {
       console.error("Unexpected error:", err);
       setError("An unexpected error occurred. Please try again.");
