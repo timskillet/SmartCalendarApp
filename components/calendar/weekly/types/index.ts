@@ -1,4 +1,4 @@
-export interface Event {
+export interface CalendarEntry {
   id: string;
   title: string;
   description: string;

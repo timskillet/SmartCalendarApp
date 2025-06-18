@@ -2,7 +2,6 @@ import { fetchUserCalendars } from "@/services/CalendarService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Text } from "react-native";
 
 interface Calendar {
   id: string;
@@ -11,6 +10,14 @@ interface Calendar {
   is_primary: boolean;
   is_shared?: boolean;
   permission?: "view" | "edit" | "copy";
+  user_id?: string;
+  created_at?: string;
+}
+
+interface CalendarData {
+  editableCalendars: Calendar[];
+  viewableCalendars: Calendar[];
+  copyableCalendars: Calendar[];
 }
 
 interface CalendarContextType {
@@ -24,6 +31,7 @@ interface CalendarContextType {
   setCalendars: (calendars: Calendar[]) => void;
   clearSelection: () => void;
   refreshCalendars: () => Promise<void>;
+  isLoading: boolean;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(
@@ -41,27 +49,6 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
   const [copyableCalendars, setCopyableCalendars] = useState<Calendar[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["user-calendars"],
-    queryFn: fetchUserCalendars,
-  });
-
-  useEffect(() => {
-    if (data) {
-      setEditableCalendars(data.editableCalendars);
-      setViewableCalendars(data.viewableCalendars);
-      setCopyableCalendars(data.copyableCalendars);
-      setCalendars([
-        ...data.editableCalendars,
-        ...data.viewableCalendars,
-        ...data.copyableCalendars,
-      ]);
-    }
-  }, [data]);
-
-  const selectedCalendar =
-    calendars.find((cal) => cal.id === selectedCalendarId) || null;
-
   // Load persisted selection on app start
   useEffect(() => {
     const loadSelection = async () => {
@@ -78,6 +65,77 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
     };
     loadSelection();
   }, []);
+
+  const { data, isLoading, refetch } = useQuery<CalendarData>({
+    queryKey: ["user-calendars"],
+    queryFn: async () => {
+      const result = await fetchUserCalendars();
+
+      // Ensure all calendar objects have the required properties
+      const processCalendar = (cal: any): Calendar => {
+        if (!cal || !cal.id) {
+          console.warn("CalendarProvider: Invalid calendar object:", cal);
+          return null as any;
+        }
+        return {
+          id: cal.id,
+          name: cal.name || "Unnamed Calendar",
+          color: cal.color || "#3B82F6",
+          is_primary: cal.is_primary || false,
+          permission: cal.permission,
+          user_id: cal.user_id,
+          created_at: cal.created_at,
+        };
+      };
+
+      const processedData = {
+        editableCalendars: result.editableCalendars
+          .map(processCalendar)
+          .filter(Boolean),
+        viewableCalendars: result.viewableCalendars
+          .map(processCalendar)
+          .filter(Boolean),
+        copyableCalendars: result.copyableCalendars
+          .map(processCalendar)
+          .filter(Boolean),
+      };
+
+      return processedData;
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 30, // 30 minutes
+    retry: 3, // Retry failed requests 3 times
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+  });
+
+  useEffect(() => {
+    if (data) {
+      setEditableCalendars(data.editableCalendars);
+      setViewableCalendars(data.viewableCalendars);
+      setCopyableCalendars(data.copyableCalendars);
+
+      const allCalendars = [
+        ...data.editableCalendars,
+        ...data.viewableCalendars,
+        ...data.copyableCalendars,
+      ];
+
+      setCalendars(allCalendars);
+
+      // If no calendar is selected and we have calendars, select the primary one
+      if (!selectedCalendarId && allCalendars.length > 0) {
+        const primaryCalendar = allCalendars.find((cal) => cal.is_primary);
+        if (primaryCalendar) {
+          setSelectedCalendar(primaryCalendar.id);
+        } else {
+          setSelectedCalendar(allCalendars[0].id);
+        }
+      }
+    }
+  }, [data, selectedCalendarId]);
+
+  const selectedCalendar =
+    calendars.find((cal) => cal.id === selectedCalendarId) || null;
 
   const setSelectedCalendar = async (calendarId: string) => {
     setSelectedCalendarId(calendarId);
@@ -101,12 +159,6 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
     await refetch();
   };
 
-  if (isLoading) {
-    return (
-      <Text className="flex-1 items-center justify-center">Loading...</Text>
-    );
-  }
-
   return (
     <CalendarContext.Provider
       value={{
@@ -120,6 +172,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
         setCalendars,
         clearSelection,
         refreshCalendars,
+        isLoading,
       }}
     >
       {children}
@@ -129,7 +182,7 @@ export const CalendarProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useCalendar = () => {
   const context = useContext(CalendarContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useCalendar must be used within a CalendarProvider");
   }
   return context;

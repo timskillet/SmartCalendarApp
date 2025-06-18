@@ -15,7 +15,7 @@ export const TimeSlotGrid = ({
     <View
       key={hour.toISOString()}
       style={{ height: HOUR_HEIGHT }}
-      className="flex-row border-b border-gray-100"
+      className="flex-row border-b border-gray-300"
     >
       <View className="w-16 items-center justify-start py-2">
         <Text className="text-xs font-bold text-gray-500">

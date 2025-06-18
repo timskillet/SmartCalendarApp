@@ -1,3 +1,5 @@
+import { CalendarEntry } from "@/components/calendar/types";
+import { useCalendar } from "@/context/CalendarProvider";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import DateTimePicker, {
@@ -9,14 +11,12 @@ import {
   Modal,
   Platform,
   ScrollView,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { Event } from "../../types/index";
 
 // Color options with their hex values
 const colorOptions = [
@@ -27,12 +27,20 @@ const colorOptions = [
   { name: "Purple", color: "#800080" },
 ];
 
+// Type options for events
+const typeOptions = [
+  { type: "event", icon: "event" as const },
+  { type: "task", icon: "check-circle" as const },
+  { type: "habit", icon: "repeat" as const },
+  { type: "goal", icon: "emoji-events" as const },
+];
+
 interface EditEventModalProps {
   visible: boolean;
   onClose: () => void;
-  onUpdate: (updatedEvent: Event) => void;
+  onUpdate: (updatedEvent: CalendarEntry) => void;
   onDelete: (eventId: string) => void;
-  event: Event;
+  entry: CalendarEntry;
 }
 
 export const EditEventModal: React.FC<EditEventModalProps> = ({
@@ -40,33 +48,42 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
   onClose,
   onUpdate,
   onDelete,
-  event,
+  entry,
 }) => {
-  const [title, setTitle] = useState(event.title || "");
-  const [location, setLocation] = useState(event.location || "");
-  const [description, setDescription] = useState(event.description || "");
-  const [startTime, setStartTime] = useState(event.startTime);
-  const [endTime, setEndTime] = useState(event.endTime);
-  const [repeat, setRepeat] = useState(event.repeat || false);
-  const [color, setColor] = useState(event.color || "#000000");
+  const { calendars } = useCalendar();
+  const [title, setTitle] = useState(entry.title || "");
+  const [location, setLocation] = useState(entry.location || "");
+  const [description, setDescription] = useState(entry.description || "");
+  const [startTime, setStartTime] = useState(entry.startTime);
+  const [endTime, setEndTime] = useState(entry.endTime);
+  const [repeat, setRepeat] = useState(entry.repeat || false);
+  const [color, setColor] = useState(entry.color || "#000000");
   const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
+  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+  const [isCalendarDropdownOpen, setIsCalendarDropdownOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState(entry.type || "event");
+  const [selectedCalendarId, setSelectedCalendarId] = useState(
+    entry.calendarId
+  );
   const [selectedColorName, setSelectedColorName] = useState(
     colorOptions.find((c) => c.color === color)?.name || "Black"
   );
 
   useEffect(() => {
     // Reset form when event changes
-    setTitle(event.title || "");
-    setLocation(event.location || "");
-    setDescription(event.description || "");
-    setStartTime(event.startTime);
-    setEndTime(event.endTime);
-    setRepeat(event.repeat || false);
-    setColor(event.color || "#000000");
+    setTitle(entry.title || "");
+    setLocation(entry.location || "");
+    setDescription(entry.description || "");
+    setStartTime(entry.startTime);
+    setEndTime(entry.endTime);
+    setRepeat(entry.repeat || false);
+    setColor(entry.color || "#000000");
+    setSelectedType(entry.type || "event");
+    setSelectedCalendarId(entry.calendarId);
     setSelectedColorName(
-      colorOptions.find((c) => c.color === event.color)?.name || "Black"
+      colorOptions.find((c) => c.color === entry.color)?.name || "Black"
     );
-  }, [event]);
+  }, [entry]);
 
   const handleRecurringChange = () => {
     setRepeat(!repeat);
@@ -123,8 +140,7 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
       }
 
       const { data, error } = await supabase
-        .schema("api")
-        .from("events")
+        .from("calendar_entries")
         .update({
           title: title || "New Event",
           description: description || "",
@@ -133,9 +149,11 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
           repeat: repeat,
           location: location || "",
           color: color,
+          type: selectedType,
+          calendar_id: selectedCalendarId,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", event.id)
+        .eq("id", entry.id)
         .select();
 
       if (error) {
@@ -143,8 +161,8 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
         return;
       }
 
-      const updatedEvent: Event = {
-        ...event,
+      const updatedEvent: CalendarEntry = {
+        ...entry,
         title: title || "New Event",
         description: description || "",
         startTime: startTime,
@@ -152,6 +170,8 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
         repeat: repeat,
         location: location || "",
         color: color,
+        type: selectedType,
+        calendarId: selectedCalendarId,
       };
 
       onUpdate(updatedEvent);
@@ -171,7 +191,7 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          onDelete(event.id);
+          onDelete(entry.id);
           onClose();
         },
       },
@@ -189,8 +209,14 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
         <View className="flex-1 bg-black/50 justify-center items-center">
           <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
             <View className="bg-white rounded-xl p-5 w-[90%] max-w-[400px]">
-              <Text className="text-xl font-bold mb-5">Edit Event</Text>
+              <View className="flex-row justify-between items-center mb-6">
+                <Text className="text-2xl font-bold">Edit Entry</Text>
+                <TouchableOpacity onPress={onClose}>
+                  <MaterialIcons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
 
+              {/* Title */}
               <TextInput
                 className="border border-gray-200 rounded-lg p-3 mb-4"
                 placeholder="Event Title"
@@ -198,24 +224,150 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
                 onChangeText={setTitle}
               />
 
-              <TextInput
-                className="border border-gray-200 rounded-lg p-3 mb-4"
-                placeholder="Location"
-                value={location}
-                onChangeText={setLocation}
-              />
+              {/* Type */}
+              <View className="mb-4 relative">
+                <Text className="text-gray-600 mb-2">Type</Text>
+                <TouchableOpacity
+                  onPress={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                >
+                  <View className="flex-row items-center">
+                    <MaterialIcons
+                      name={
+                        typeOptions.find((t) => t.type === selectedType)
+                          ?.icon || "event"
+                      }
+                      size={20}
+                      color="#6B7280"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text className="text-gray-700">
+                      {selectedType.charAt(0).toUpperCase() +
+                        selectedType.slice(1)}
+                    </Text>
+                  </View>
+                  <MaterialIcons
+                    name={
+                      isTypeDropdownOpen ? "arrow-drop-up" : "arrow-drop-down"
+                    }
+                    size={24}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
 
-              <TextInput
-                className="border border-gray-200 rounded-lg p-3 mb-4 min-h-[100px]"
-                placeholder="Description"
-                value={description}
-                onChangeText={setDescription}
-                multiline
-              />
+                {isTypeDropdownOpen && (
+                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                    {typeOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.type}
+                        onPress={() => {
+                          setSelectedType(option.type);
+                          setIsTypeDropdownOpen(false);
+                        }}
+                        className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                      >
+                        <MaterialIcons
+                          name={option.icon}
+                          size={20}
+                          color="#6B7280"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text className="text-gray-700">
+                          {option.type.charAt(0).toUpperCase() +
+                            option.type.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
 
-              <View className="flex-row items-center justify-start">
-                <Text className="text-gray-600 mb-2">Start Time:</Text>
-                <View className="p-2">
+              {/* Calendar Selection */}
+              <View className="mb-4 relative">
+                <Text className="text-gray-600 mb-2">Calendar:</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setIsCalendarDropdownOpen(!isCalendarDropdownOpen)
+                  }
+                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                >
+                  <View className="flex-row items-center">
+                    <View
+                      className="w-4 h-4 rounded-full mr-2"
+                      style={{
+                        backgroundColor:
+                          calendars.find((c) => c.id === selectedCalendarId)
+                            ?.color || "#3B82F6",
+                      }}
+                    />
+                    <Text className="text-gray-700">
+                      {calendars.find((c) => c.id === selectedCalendarId)
+                        ?.name || "Select Calendar"}
+                    </Text>
+                  </View>
+                  <MaterialIcons
+                    name={
+                      isCalendarDropdownOpen
+                        ? "arrow-drop-up"
+                        : "arrow-drop-down"
+                    }
+                    size={24}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+
+                {isCalendarDropdownOpen && (
+                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                    {calendars.map((calendar) => (
+                      <TouchableOpacity
+                        key={calendar.id}
+                        onPress={() => {
+                          setSelectedCalendarId(calendar.id);
+                          setIsCalendarDropdownOpen(false);
+                        }}
+                        className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                      >
+                        <View
+                          className="w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: calendar.color }}
+                        />
+                        <Text className="text-gray-700">{calendar.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Date */}
+              <Text className="text-gray-600 mb-2">Date</Text>
+              <View className="flex-col border border-gray-200 rounded-lg mb-4">
+                {/* Day */}
+                <View className="border-b border-gray-200 flex-row items-center justify-between px-2 py-1">
+                  <View className="flex-row items-center">
+                    <MaterialIcons
+                      name="date-range"
+                      size={24}
+                      color="#6B7280"
+                    />
+                    <Text className="pl-2 text-gray-600">Date</Text>
+                  </View>
+                  <DateTimePicker
+                    className="flex-1"
+                    mode="date"
+                    value={startTime}
+                  />
+                </View>
+
+                {/* Start Time */}
+                <View className="border-b border-gray-200 flex-row items-center justify-between px-2 py-1">
+                  <View className="flex-row items-center">
+                    <MaterialIcons
+                      name="access-time"
+                      size={24}
+                      color="#6B7280"
+                    />
+                    <Text className="pl-2 text-gray-600">Start Time</Text>
+                  </View>
                   <DateTimePicker
                     mode="time"
                     is24Hour={true}
@@ -223,11 +375,17 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
                     onChange={handleStartTimeChange}
                   />
                 </View>
-              </View>
 
-              <View className="flex-row items-center justify-start">
-                <Text className="text-gray-600 mb-2">End Time:</Text>
-                <View className="p-2">
+                {/* End Time */}
+                <View className="flex-row items-center justify-between px-2 py-1">
+                  <View className="flex-row items-center">
+                    <MaterialIcons
+                      name="access-time"
+                      size={24}
+                      color="#6B7280"
+                    />
+                    <Text className="pl-2 text-gray-600">End Time</Text>
+                  </View>
                   <DateTimePicker
                     mode="time"
                     is24Hour={true}
@@ -235,16 +393,6 @@ export const EditEventModal: React.FC<EditEventModalProps> = ({
                     onChange={handleEndTimeChange}
                   />
                 </View>
-              </View>
-
-              <View className="flex-row items-center justify-start my-2">
-                <Text className="text-gray-600 mb-2">Recurring?</Text>
-                <Switch
-                  className="p-2"
-                  thumbColor={"white"}
-                  value={repeat}
-                  onChange={handleRecurringChange}
-                />
               </View>
 
               {/* Color Selection */}

@@ -1,14 +1,17 @@
 import GoalCard from "@/components/GoalCard";
-import CalendarPreview from "@/components/calendar/CalendarPreview";
 import { ShareCalendarModal } from "@/components/calendar/ShareCalendarModal";
 import { Calendar } from "@/components/calendar/types";
+import { useCalendarEntries } from "@/context/CalendarEntryProvider";
 import { useCalendar } from "@/context/CalendarProvider";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   Text,
@@ -21,6 +24,19 @@ type EventIcon = "check-circle" | "edit" | "directions-run";
 interface ChecklistItem {
   text: string;
   done: boolean;
+}
+
+interface CalendarEntry {
+  id: string;
+  calendar_id: string;
+  title: string;
+  type: string;
+  start_time: string;
+  end_time: string;
+  completed: boolean;
+  color: string;
+  icon: string;
+  iconColor: string;
 }
 
 interface BaseGoal {
@@ -138,10 +154,24 @@ const fakeEvents: Array<{
 ];
 
 const dashboard = () => {
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams();
   const { calendars, selectedCalendar, setSelectedCalendar } = useCalendar();
   const [isCalendarModalVisible, setIsCalendarModalVisible] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const {
+    entries: tasks,
+    isLoading: isLoadingTasks,
+    selectedTimeRange,
+    setSelectedTimeRange,
+    refreshEntries,
+    getEntriesForCalendar,
+    setVisibleCalendarIds,
+    visibleCalendarIds,
+  } = useCalendarEntries();
+
+  const calendarTasks = getEntriesForCalendar(selectedCalendar?.id || "");
 
   useEffect(() => {
     // If no calendar is selected, select the primary calendar
@@ -156,6 +186,33 @@ const dashboard = () => {
     }
     console.log("Available calendars:", calendars);
   }, [calendars, selectedCalendar]);
+
+  // Set visible calendar IDs when selected calendar changes
+  useEffect(() => {
+    if (selectedCalendar?.id) {
+      console.log("Setting visible calendar IDs:", [selectedCalendar.id]);
+      setVisibleCalendarIds([selectedCalendar.id]);
+    } else {
+      console.log("No selected calendar, clearing visible calendar IDs");
+      setVisibleCalendarIds([]);
+    }
+  }, [selectedCalendar?.id, setVisibleCalendarIds]);
+
+  // Debug effect to log state changes
+  useEffect(() => {
+    console.log("=== Dashboard State Debug ===");
+    console.log("Selected calendar:", selectedCalendar);
+    console.log("Visible calendar IDs:", visibleCalendarIds);
+    console.log("All entries from provider:", tasks);
+    console.log("Calendar tasks for selected calendar:", calendarTasks);
+    console.log("Is loading tasks:", isLoadingTasks);
+  }, [
+    selectedCalendar,
+    visibleCalendarIds,
+    tasks,
+    calendarTasks,
+    isLoadingTasks,
+  ]);
 
   const renderCalendarItem = ({ item }: { item: Calendar }) => (
     <TouchableOpacity
@@ -177,6 +234,20 @@ const dashboard = () => {
       </View>
     </TouchableOpacity>
   );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      console.log("Refreshing tasks");
+      console.log("Selected calendar:", selectedCalendar);
+      console.log("Calendar tasks:", calendarTasks);
+      await refreshEntries();
+    } catch (error) {
+      console.error("Error refreshing tasks:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [selectedCalendar?.id, refreshEntries, calendarTasks]);
 
   return (
     <SafeAreaView className="flex-1">
@@ -240,50 +311,93 @@ const dashboard = () => {
           </View>
         </Modal>
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-          {/* Calendar */}
-          <CalendarPreview />
-
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          className="flex-1"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#3B82F6"]}
+              tintColor="#3B82F6"
+              title="Refreshing tasks..."
+              titleColor="#6B7280"
+            />
+          }
+        >
           {/* Today Section */}
           <View className="flex-1 mt-4">
             <Text className="text-2xl font-bold mb-2">Today's Agenda</Text>
             <View className="mb-4">
-              {fakeEvents.map((event, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  className="flex-row items-center mb-2 px-2 py-3 rounded-2xl"
-                  style={{ backgroundColor: event.color }}
-                >
-                  <View className="mr-3">
-                    <MaterialIcons
-                      name={event.checked ? "check-box" : event.icon}
-                      size={24}
-                      color={event.checked ? "#6366f1" : "#6b7280"}
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-base font-semibold text-gray-900">
-                      {event.title}
+              {isLoadingTasks ? (
+                <View className="flex-row justify-center items-center py-4">
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <Text className="ml-2 text-gray-600">Loading tasks...</Text>
+                </View>
+              ) : calendarTasks.length > 0 ? (
+                calendarTasks.map((task) => (
+                  <TouchableOpacity
+                    key={task.id}
+                    className="flex-row items-center mb-2 px-2 py-3 rounded-2xl"
+                    style={{ backgroundColor: `${task.color}20` }} // 20 is for 12% opacity
+                  >
+                    <View className="mr-3">
+                      <MaterialIcons
+                        name={
+                          task.completed
+                            ? "check-box"
+                            : task.type === "event"
+                            ? "event"
+                            : task.type === "task"
+                            ? "check-circle"
+                            : task.type === "habit"
+                            ? "repeat"
+                            : "emoji-events"
+                        }
+                        size={24}
+                        color={task.completed ? "#6366f1" : task.color}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-gray-900">
+                        {task.title}
+                      </Text>
+                      <Text className="text-sm text-gray-500">
+                        {task.type.charAt(0).toUpperCase() + task.type.slice(1)}
+                      </Text>
+                    </View>
+                    <Text className="text-gray-700 text-base font-medium">
+                      {new Date(task.startTime).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {task.endTime && " - "}
+                      {task.endTime &&
+                        new Date(task.endTime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                     </Text>
-                  </View>
-                  <Text className="text-gray-700 text-base font-medium">
-                    {event.time}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View className="flex-row justify-center items-center py-4">
+                  <MaterialIcons name="event-busy" size={24} color="#9CA3AF" />
+                  <Text className="ml-2 text-gray-500">No tasks for today</Text>
+                </View>
+              )}
               <TouchableOpacity
-                className="bg-gray-300 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
+                className="bg-gray-100 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
                 onPress={() => router.push("/scheduler")}
               >
                 <View className="mr-3">
-                  <MaterialIcons name={"add"} size={24} color={"gray"} />
+                  <MaterialIcons name="add" size={24} color="#6B7280" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-semibold text-gray-900">
                     Add new task
                   </Text>
                 </View>
-                <Text className="text-gray-700 text-base font-medium"></Text>
               </TouchableOpacity>
             </View>
           </View>

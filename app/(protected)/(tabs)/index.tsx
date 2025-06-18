@@ -1,9 +1,9 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { User } from "@supabase/supabase-js";
+import { useQuery } from "@tanstack/react-query";
 import { endOfDay, startOfDay } from "date-fns";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -12,8 +12,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { CalendarCard } from "../../../components/calendar/CalendarCard";
 import { CreateCalendarModal } from "../../../components/calendar/CreateCalendarModal";
 import { useAuth } from "../../../context/AuthProvider";
+import { useCalendar } from "../../../context/CalendarProvider";
 import { supabase } from "../../../lib/supabase";
 
 // Color options with their hex values
@@ -24,37 +26,6 @@ const colorOptions = [
   { name: "Yellow", color: "#FFFF00" },
   { name: "Purple", color: "#800080" },
 ];
-
-interface Calendar {
-  id: string;
-  name: string;
-  color: string;
-  is_primary: boolean;
-  created_at: string;
-  user_id: string;
-  is_shared?: boolean;
-  shared_by?: {
-    email: string;
-  };
-  user?: {
-    email: string;
-  };
-}
-
-interface CalendarShare {
-  calendar_id: string;
-  calendar: {
-    id: string;
-    name: string;
-    color: string;
-    is_primary: boolean;
-    created_at: string;
-    user_id: string;
-    user: {
-      email: string;
-    };
-  } | null;
-}
 
 interface Task {
   id: string;
@@ -71,24 +42,61 @@ interface Task {
 
 export default function HomeScreen() {
   const { signOut } = useAuth();
-  const [calendars, setCalendars] = useState<Calendar[]>([]);
-  const [isLoadingCalendars, setIsLoadingCalendars] = useState(true);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const {
+    calendars,
+    isLoading: isLoadingCalendars,
+    refreshCalendars,
+  } = useCalendar();
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState(colorOptions[0].color);
   const [selectedColorName, setSelectedColorName] = useState(
     colorOptions[0].name
   );
   const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+
+  // Fetch user data
+  const { data: user } = useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      return user;
+    },
+  });
+
+  // Fetch today's tasks
+  const { data: tasks = [], isLoading: isLoadingTasks } = useQuery({
+    queryKey: ["today-tasks"],
+    queryFn: async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const today = new Date();
+      const { data: todayTasks } = await supabase
+        .from("calendar_entries")
+        .select(
+          `
+          *,
+          calendar:calendars(color)
+        `
+        )
+        .gte("start_time", startOfDay(today).toISOString())
+        .lte("start_time", endOfDay(today).toISOString())
+        .order("start_time", { ascending: true });
+
+      return todayTasks || [];
+    },
+  });
+
   const handleLogout = async () => {
     await signOut();
     router.replace("/(auth)/login");
   };
 
-  const handleCalendarPress = (calendar: Calendar) => {
-    // Navigate to calendar tab with the specific calendar ID
+  const handleCalendarPress = (calendar: any) => {
     router.push({
       pathname: "/(protected)/(tabs)/dashboard",
       params: {
@@ -117,6 +125,7 @@ export default function HomeScreen() {
             color: selectedColor,
             user_id: user.id,
             is_primary: false,
+            createdAt: new Date().toISOString(),
           },
         ])
         .select()
@@ -124,168 +133,16 @@ export default function HomeScreen() {
 
       if (error) throw error;
 
-      setCalendars((prev) => [...prev, data]);
+      // Refresh calendars using the provider
+      await refreshCalendars();
     } catch (err) {
       console.error("Error creating calendar:", err);
     }
   };
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      setUser(user);
-    };
-    fetchUser();
-  }, []);
-
-  // Fetch user's calendars
-  useEffect(() => {
-    const fetchCalendars = async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          console.error("No authenticated user found");
-          setIsLoadingCalendars(false);
-          return;
-        }
-
-        setIsLoadingCalendars(true);
-
-        // First, get all calendar shares for this user
-        const { data: shares, error: sharesError } = (await supabase
-          .from("calendar_shares")
-          .select(
-            `
-            calendar_id,
-            calendar:calendars (
-              id,
-              name,
-              color,
-              is_primary,
-              created_at,
-              user_id,
-              user:user_id (
-                email
-              )
-            )
-          `
-          )
-          .eq("shared_with", user.id)) as {
-          data: CalendarShare[] | null;
-          error: any;
-        };
-
-        if (sharesError) {
-          console.error("Error fetching shares:", sharesError);
-          return;
-        }
-
-        // Get owned calendars
-        const { data: ownedCalendars, error: ownedError } = await supabase
-          .from("calendars")
-          .select(
-            `
-            *,
-            user:user_id (
-              email
-            )
-          `
-          )
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: true });
-
-        if (ownedError) {
-          console.error("Error fetching owned calendars:", ownedError);
-          return;
-        }
-
-        // Format owned calendars
-        const formattedOwnedCalendars = (ownedCalendars || []).map(
-          (calendar) => ({
-            ...calendar,
-            is_shared: false,
-          })
-        );
-
-        // Format shared calendars
-        const formattedSharedCalendars = (shares || [])
-          .filter((share) => share.calendar) // Filter out any null calendars
-          .map((share) => ({
-            ...share.calendar!,
-            is_shared: true,
-            shared_by: {
-              email: share.calendar!.user?.email || "Unknown User",
-            },
-          }));
-
-        // Combine both types of calendars
-        const allCalendars = [
-          ...formattedOwnedCalendars,
-          ...formattedSharedCalendars,
-        ];
-
-        setCalendars(allCalendars);
-      } catch (err) {
-        console.error("Error in fetchCalendars:", err);
-      } finally {
-        setIsLoadingCalendars(false);
-      }
-    };
-
-    fetchCalendars();
-  }, []);
-
-  // Fetch today's tasks
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          console.error("No authenticated user found");
-          setIsLoadingTasks(false);
-          return;
-        }
-
-        const today = new Date();
-        const { data: todayTasks, error } = await supabase
-          .from("calendar_entries")
-          .select(
-            `
-            *,
-            calendar:calendars(color)
-          `
-          )
-          .gte("start_time", startOfDay(today).toISOString())
-          .lte("start_time", endOfDay(today).toISOString())
-          .order("start_time", { ascending: true });
-
-        if (error) {
-          console.error("Error fetching tasks:", error);
-        } else {
-          setTasks(todayTasks || []);
-        }
-      } catch (err) {
-        console.error("Error in fetchTasks:", err);
-      } finally {
-        setIsLoadingTasks(false);
-      }
-    };
-
-    fetchTasks();
-  }, []);
-
   return (
-    <LinearGradient colors={["#a7f3d0", "#93c5fd"]} className="flex-1">
-      <SafeAreaView className="bg-gray-100">
+    <LinearGradient colors={["#a7f3d0", "#93c5fd"]} style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }}>
         <View className="px-4 py-2">
           <View className="flex-row justify-between items-center">
             <Text className="text-3xl font-bold">Jump back in,</Text>
@@ -298,13 +155,16 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <ScrollView>
+        <ScrollView className="flex-1">
           {/* My Calendars */}
           <View className="px-4 py-2">
             <View className="flex-row justify-between items-center">
-              <Text className="text-2xl font-bold text-gray-800">
-                My Calendars
-              </Text>
+              <View className="flex-row items-center gap-2">
+                <MaterialIcons name="calendar-today" size={24} color="black" />
+                <Text className="text-2xl font-bold text-gray-800">
+                  My Calendars
+                </Text>
+              </View>
               <TouchableOpacity
                 className="p-2 border border-gray-300 rounded-full"
                 onPress={() => setIsCreateModalVisible(true)}
@@ -317,7 +177,7 @@ export default function HomeScreen() {
             <View className="my-4">
               {isLoadingCalendars ? (
                 <View className="flex-row justify-center items-center py-8">
-                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <ActivityIndicator size="small" color="#3B82F6" />
                   <Text className="ml-2 text-gray-600">
                     Loading calendars...
                   </Text>
@@ -325,54 +185,18 @@ export default function HomeScreen() {
               ) : calendars.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View className="flex-row gap-4">
-                    {calendars.map((calendar, idx) => (
-                      <TouchableOpacity
-                        key={idx}
-                        className="p-4 bg-white rounded-lg min-w-[150px] shadow-sm"
-                        style={{
-                          borderLeftWidth: 4,
-                          borderLeftColor: calendar.color,
+                    {calendars.map((calendar) => (
+                      <CalendarCard
+                        key={calendar.id}
+                        calendar={{
+                          ...calendar,
+                          user_id: calendar.user_id || "",
+                          createdAt: calendar.created_at
+                            ? new Date(calendar.created_at)
+                            : new Date(),
                         }}
-                        onPress={() => handleCalendarPress(calendar)}
-                        activeOpacity={0.7}
-                      >
-                        <View className="flex-row items-center mb-2">
-                          <View
-                            className="w-3 h-3 rounded-full mr-2"
-                            style={{ backgroundColor: calendar.color }}
-                          />
-                          <Text
-                            className="text-lg font-bold flex-1"
-                            numberOfLines={1}
-                          >
-                            {calendar.name}
-                          </Text>
-                          {calendar.is_primary && (
-                            <MaterialIcons
-                              name="star"
-                              size={16}
-                              color="#FFD700"
-                            />
-                          )}
-                        </View>
-                        <Text className="text-sm text-gray-500">
-                          {calendar.is_shared
-                            ? `Shared by ${calendar.shared_by?.email}`
-                            : `Created ${new Date(
-                                calendar.created_at
-                              ).toLocaleDateString()}`}
-                        </Text>
-                        <View className="flex-row items-center mt-2">
-                          <MaterialIcons
-                            name="arrow-forward"
-                            size={16}
-                            color="#6B7280"
-                          />
-                          <Text className="text-xs text-gray-500 ml-1">
-                            View calendar
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
+                        onPress={handleCalendarPress}
+                      />
                     ))}
                   </View>
                 </ScrollView>
@@ -399,18 +223,21 @@ export default function HomeScreen() {
           {/* Today's tasks */}
           <View className="px-4 py-2">
             <View className="flex-row justify-between items-center">
-              <Text className="text-2xl font-bold text-gray-800">
-                Today's Tasks
-              </Text>
+              <View className="flex-row items-center gap-2">
+                <MaterialIcons name="check" size={24} color="black" />
+                <Text className="text-2xl font-bold text-gray-800">
+                  Today's Tasks
+                </Text>
+              </View>
               <TouchableOpacity className="p-2 border border-gray-300 rounded-full">
                 <MaterialIcons name="add" size={24} color="black" />
               </TouchableOpacity>
             </View>
 
-            <View className="my-4">
+            <TouchableOpacity className="bg-white rounded-xl my-4">
               {isLoadingTasks ? (
                 <View className="flex-row justify-center items-center py-8">
-                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <ActivityIndicator size="small" color="#3B82F6" />
                   <Text className="ml-2 text-gray-600">Loading tasks...</Text>
                 </View>
               ) : tasks.length > 0 ? (
@@ -460,7 +287,7 @@ export default function HomeScreen() {
                 </View>
               ) : (
                 <View className="flex-row justify-center items-center py-8">
-                  <MaterialIcons name="task" size={48} color="#D1D5DB" />
+                  <MaterialIcons name="task" size={24} color="black" />
                   <View className="ml-4">
                     <Text className="text-gray-600 text-lg font-semibold">
                       No tasks for today
@@ -471,7 +298,88 @@ export default function HomeScreen() {
                   </View>
                 </View>
               )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Scheduler */}
+          <View className="px-4 py-2">
+            <View className="flex-row justify-between items-center">
+              <View className="flex-row items-center gap-2">
+                <MaterialIcons name="schedule" size={24} color="black" />
+                <Text className="text-2xl font-bold text-gray-800">
+                  Scheduler
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push("../scheduler_form")}
+                className="p-2 border border-gray-300 rounded-full"
+              >
+                <MaterialIcons name="add" size={24} color="black" />
+              </TouchableOpacity>
             </View>
+            <TouchableOpacity className="rounded-xl bg-white my-4">
+              {isLoadingTasks ? (
+                <View className="flex-row justify-center items-center py-8">
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <Text className="ml-2 text-gray-600">Loading tasks...</Text>
+                </View>
+              ) : tasks.length > 0 ? (
+                <View className="space-y-3">
+                  {tasks.map((task) => (
+                    <View
+                      key={task.id}
+                      className="bg-white p-4 rounded-lg shadow-sm"
+                      style={{
+                        borderLeftWidth: 4,
+                        borderLeftColor: task.calendar.color,
+                      }}
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-lg font-semibold flex-1">
+                          {task.title}
+                        </Text>
+                        <TouchableOpacity
+                          className={`p-2 rounded-full ${
+                            task.completed ? "bg-green-100" : "bg-gray-100"
+                          }`}
+                        >
+                          <MaterialIcons
+                            name={
+                              task.completed
+                                ? "check-circle"
+                                : "radio-button-unchecked"
+                            }
+                            size={24}
+                            color={task.completed ? "#10B981" : "#6B7280"}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      {task.description && (
+                        <Text className="text-gray-600 mt-1">
+                          {task.description}
+                        </Text>
+                      )}
+                      <Text className="text-sm text-gray-500 mt-2">
+                        {new Date(task.start_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View className="flex-row justify-center items-center py-8">
+                  <MaterialIcons name="schedule-send" size={24} color="black" />
+                  <View className="ml-4">
+                    <Text className="text-gray-600 text-lg font-semibold">
+                      No scheduled events
+                    </Text>
+                    <Text className="text-gray-500">Schedule a new event</Text>
+                  </View>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </ScrollView>
 

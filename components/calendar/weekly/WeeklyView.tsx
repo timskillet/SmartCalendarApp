@@ -7,7 +7,9 @@ import {
   addDays,
   addHours,
   addWeeks,
+  differenceInMinutes,
   format,
+  startOfDay,
   subDays,
   subWeeks,
 } from "date-fns";
@@ -21,7 +23,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
-import { Calendar, Event } from "../types";
+import { Calendar, CalendarEntry } from "../types";
 import { calculateEventPosition, getHours } from "../utils/utils";
 import { EditEventModal } from "./components/EditEventModal";
 import { EventBox } from "./components/EventBox";
@@ -57,12 +59,14 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     useState(selectedCalendarId);
 
   /* EVENT CREATION*/
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<CalendarEntry[]>([]);
   const [snappedPosition, setSnappedPosition] = useState(0);
   const [isEventModalVisible, setIsEventModalVisible] = useState(false);
   const [draggableBoxTime, setDraggableBoxTime] = useState(""); // Event time displayed in event box
   const [eventStartTime, setEventStartTime] = useState<Date>(new Date()); // event start time used for EventModal component
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEntry | null>(
+    null
+  );
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [dateSelected, setDateSelected] = useState(selectedDate);
 
@@ -149,8 +153,6 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // If a specific calendar is selected from home page, only show events from that calendar
-
       const { data: calendarEvents, error } = await supabase
         .from("calendar_entries")
         .select("*")
@@ -199,11 +201,11 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
             color:
               calendars.find((cal) => cal.id === event.calendar_id)?.color ||
               "#3B82F6",
-            description: event.description,
-            location: event.location,
-            invitees: event.invitees,
+            description: event.description || "",
+            location: event.location || "",
+            invitees: event.invitees || [],
             position: calculateEventPosition(localStartTime, localEndTime).top,
-            repeat: false,
+            repeat: event.repeat || false,
             createdAt: new Date(event.created_at),
             updatedAt: event.updated_at
               ? new Date(event.updated_at)
@@ -435,7 +437,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
       return;
     }
 
-    const newEvent: Event = {
+    const newEvent: CalendarEntry = {
       id: data[0].id,
       calendarId: selectedCalendarIdState,
       title: eventDetails.title,
@@ -462,12 +464,12 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     console.log("Time slot pressed:", timeString);
   };
 
-  const handleEventPress = (event: Event) => {
+  const handleEventPress = (event: CalendarEntry) => {
     setSelectedEvent(event);
     setIsEditModalVisible(true);
   };
 
-  const handleUpdateEvent = (updatedEvent: Event) => {
+  const handleUpdateEvent = (updatedEvent: CalendarEntry) => {
     setEvents((prevEvents) =>
       prevEvents.map((event) =>
         event.id === updatedEvent.id ? updatedEvent : event
@@ -575,6 +577,23 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
     }
   };
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const getCurrentTimePosition = () => {
+    const now = new Date();
+    const startOfToday = startOfDay(now);
+    const minutesSinceStartOfDay = differenceInMinutes(now, startOfToday);
+    return (minutesSinceStartOfDay / 60) * HOUR_HEIGHT;
+  };
+
   return (
     <GestureHandlerRootView className="flex-1">
       <GestureDetector gesture={swipeGesture}>
@@ -613,6 +632,34 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     handleTimeSlotPress={handleTimeSlotPress}
                   />
                 ))}
+
+                {/* Current time indicator */}
+                {format(dateSelected, "yyyy-MM-dd") ===
+                  format(currentTime, "yyyy-MM-dd") && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      top: getCurrentTimePosition(),
+                      height: 2,
+                      backgroundColor: "#EF4444",
+                      zIndex: 1000,
+                    }}
+                  >
+                    <View
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: -4,
+                        width: 12,
+                        height: 12,
+                        borderRadius: 6,
+                        backgroundColor: "#EF4444",
+                      }}
+                    />
+                  </View>
+                )}
 
                 {/* Render all persisted events */}
                 {events.map((event, i) => {
@@ -654,7 +701,7 @@ export const WeeklyView: React.FC<WeeklyViewProps> = ({
                     }}
                     onUpdate={handleUpdateEvent}
                     onDelete={handleDeleteEvent}
-                    event={selectedEvent}
+                    entry={selectedEvent}
                   />
                 )}
 

@@ -7,7 +7,7 @@ export interface Calendar {
     createdAt: Date;
 }
 
-export interface Event {
+export interface CalendarEntry {
     id: string;
     calendarId: string;
     title: string;

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { router } from "expo-router";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -16,31 +17,61 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setSession(session);
-      setIsLoading(false);
-    };
+    let mounted = true;
 
-    fetchSession();
+    const initializeAuth = async () => {
+      try {
+        // Set up auth state change listener first
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (!mounted) return;
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        if (session) {
-          router.replace("/(protected)/(tabs)");
+            setSession(session);
+            if (session) {
+              router.replace("/(protected)/(tabs)");
+            } else if (event === "SIGNED_OUT") {
+              await AsyncStorage.clear();
+              router.replace("/(auth)/login");
+            }
+          }
+        );
+
+        // Then fetch initial session
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        setSession(initialSession);
+        setIsLoading(false);
+
+        return () => {
+          mounted = false;
+          authListener.subscription.unsubscribe();
+        };
+      } catch (error: any) {
+        if (!mounted) return;
+
+        console.error("Error initializing auth:", error);
+        if (error.message?.includes("Invalid Refresh Token")) {
+          await AsyncStorage.clear();
+          await supabase.auth.signOut();
+          router.replace("/(auth)/login");
         }
+        setIsLoading(false);
       }
-    );
-    return () => {
-      authListener.subscription.unsubscribe();
     };
+
+    initializeAuth();
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   return (
