@@ -257,226 +257,228 @@ export const EventModal: React.FC<EventModalProps> = ({
                   <MaterialIcons name="close" size={24} color="#6B7280" />
                 </TouchableOpacity>
               </View>
+              <ScrollView>
+                {/* Title */}
+                <TextInput
+                  className="border border-gray-200 rounded-lg p-3 mb-4"
+                  placeholder="Title"
+                  value={title}
+                  onChangeText={setTitle}
+                />
 
-              {/* Title */}
-              <TextInput
-                className="border border-gray-200 rounded-lg p-3 mb-4"
-                placeholder="Title"
-                value={title}
-                onChangeText={setTitle}
-              />
-
-              {/* Type */}
-              <View className="mb-4 relative">
-                <Text className="text-gray-600 mb-2">Type</Text>
-                <TouchableOpacity
-                  onPress={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
-                >
-                  <View className="flex-row items-center">
+                {/* Type */}
+                <View className="mb-4 relative">
+                  <Text className="text-gray-600 mb-2">Type</Text>
+                  <TouchableOpacity
+                    onPress={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+                    className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                  >
+                    <View className="flex-row items-center">
+                      <MaterialIcons
+                        name={
+                          typeOptions.find((t) => t.type === selectedType)
+                            ?.icon || "event"
+                        }
+                        size={20}
+                        color="#6B7280"
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text className="text-gray-700">{selectedType}</Text>
+                    </View>
                     <MaterialIcons
                       name={
-                        typeOptions.find((t) => t.type === selectedType)
-                          ?.icon || "event"
+                        isTypeDropdownOpen ? "arrow-drop-up" : "arrow-drop-down"
                       }
-                      size={20}
-                      color="#6B7280"
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text className="text-gray-700">{selectedType}</Text>
-                  </View>
-                  <MaterialIcons
-                    name={
-                      isTypeDropdownOpen ? "arrow-drop-up" : "arrow-drop-down"
-                    }
-                    size={24}
-                    color="#6B7280"
-                  />
-                </TouchableOpacity>
-
-                {isTypeDropdownOpen && (
-                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
-                    {typeOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.type}
-                        onPress={() => {
-                          setSelectedType(option.type);
-                          setIsTypeDropdownOpen(false);
-                        }}
-                        className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
-                      >
-                        <MaterialIcons
-                          name={option.icon}
-                          size={20}
-                          color="#6B7280"
-                          style={{ marginRight: 8 }}
-                        />
-                        <Text className="text-gray-700">{option.type}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              {/* Calendar Selection */}
-              <View className="mb-4 relative">
-                <Text className="text-gray-600 mb-2">Calendar:</Text>
-                <TouchableOpacity
-                  onPress={() =>
-                    setIsCalendarDropdownOpen(!isCalendarDropdownOpen)
-                  }
-                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
-                >
-                  <View className="flex-row items-center">
-                    <View
-                      className="w-4 h-4 rounded-full mr-2"
-                      style={{
-                        backgroundColor:
-                          calendars.find((c) => c.id === selectedCalendarId)
-                            ?.color || "#3B82F6",
-                      }}
-                    />
-                    <Text className="text-gray-700">
-                      {calendars.find((c) => c.id === selectedCalendarId)
-                        ?.name || "Select Calendar"}
-                    </Text>
-                  </View>
-                  <MaterialIcons
-                    name={
-                      isCalendarDropdownOpen
-                        ? "arrow-drop-up"
-                        : "arrow-drop-down"
-                    }
-                    size={24}
-                    color="#6B7280"
-                  />
-                </TouchableOpacity>
-
-                {isCalendarDropdownOpen && (
-                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
-                    {calendars.map((calendar) => (
-                      <TouchableOpacity
-                        key={calendar.id}
-                        onPress={() => {
-                          onCalendarChange(calendar.id);
-                          setIsCalendarDropdownOpen(false);
-                        }}
-                        className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
-                      >
-                        <View
-                          className="w-4 h-4 rounded-full mr-2"
-                          style={{ backgroundColor: calendar.color }}
-                        />
-                        <Text className="text-gray-700">{calendar.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              {/* Date */}
-              <Text className="text-gray-600 mb-2">Date</Text>
-              <View className="flex-col border border-gray-200 rounded-lg mb-4">
-                {/* Day */}
-                <View className="border-b border-gray-200 flex-row items-center justify-between px-2 py-1">
-                  <View className="flex-row items-center">
-                    <MaterialIcons
-                      name="date-range"
                       size={24}
                       color="#6B7280"
                     />
-                    <Text className="pl-2 text-gray-600">Date</Text>
-                  </View>
-                  <DateTimePicker
-                    className="flex-1"
-                    mode="date"
-                    value={startTime}
-                  />
-                </View>
+                  </TouchableOpacity>
 
-                {/* Start Time */}
-                <View className="border-b border-gray-200 flex-row items-center justify-between px-2 py-1">
-                  <View className="flex-row items-center">
-                    <MaterialIcons
-                      name="access-time"
-                      size={24}
-                      color="#6B7280"
-                    />
-                    <Text className="pl-2 text-gray-600">Start Time</Text>
-                  </View>
-                  <DateTimePicker
-                    mode="time"
-                    is24Hour={true}
-                    value={startTime}
-                    onChange={handleStartTimeChange}
-                  />
-                </View>
-
-                {/* End Time */}
-                <View className="flex-row items-center justify-between px-2 py-1">
-                  <View className="flex-row items-center">
-                    <MaterialIcons
-                      name="access-time"
-                      size={24}
-                      color="#6B7280"
-                    />
-                    <Text className="pl-2 text-gray-600">End Time</Text>
-                  </View>
-                  <DateTimePicker
-                    mode="time"
-                    is24Hour={true}
-                    value={endTime}
-                    onChange={handleEndTimeChange}
-                  />
-                </View>
-              </View>
-
-              {/* Color Selection */}
-              <View className="mb-4 relative">
-                <Text className="text-gray-600 mb-2">Color</Text>
-                <TouchableOpacity
-                  onPress={() => setIsColorDropdownOpen(!isColorDropdownOpen)}
-                  className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
-                >
-                  <View className="flex-row items-center">
-                    <View
-                      className="w-4 h-4 rounded-full mr-2"
-                      style={{ backgroundColor: color }}
-                    />
-                    <Text className="text-gray-700">{selectedColorName}</Text>
-                  </View>
-                  <MaterialIcons
-                    name={
-                      isColorDropdownOpen ? "arrow-drop-up" : "arrow-drop-down"
-                    }
-                    size={24}
-                    color="#6B7280"
-                  />
-                </TouchableOpacity>
-
-                {isColorDropdownOpen && (
-                  <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
-                    <ScrollView className="max-h-[200px]">
-                      {colorOptions.map((option) => (
+                  {isTypeDropdownOpen && (
+                    <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                      {typeOptions.map((option) => (
                         <TouchableOpacity
-                          key={option.name}
-                          onPress={() =>
-                            handleColorSelect(option.name, option.color)
-                          }
+                          key={option.type}
+                          onPress={() => {
+                            setSelectedType(option.type);
+                            setIsTypeDropdownOpen(false);
+                          }}
+                          className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                        >
+                          <MaterialIcons
+                            name={option.icon}
+                            size={20}
+                            color="#6B7280"
+                            style={{ marginRight: 8 }}
+                          />
+                          <Text className="text-gray-700">{option.type}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* Calendar Selection */}
+                <View className="mb-4 relative">
+                  <Text className="text-gray-600 mb-2">Calendar:</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setIsCalendarDropdownOpen(!isCalendarDropdownOpen)
+                    }
+                    className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                  >
+                    <View className="flex-row items-center">
+                      <View
+                        className="w-4 h-4 rounded-full mr-2"
+                        style={{
+                          backgroundColor:
+                            calendars.find((c) => c.id === selectedCalendarId)
+                              ?.color || "#3B82F6",
+                        }}
+                      />
+                      <Text className="text-gray-700">
+                        {calendars.find((c) => c.id === selectedCalendarId)
+                          ?.name || "Select Calendar"}
+                      </Text>
+                    </View>
+                    <MaterialIcons
+                      name={
+                        isCalendarDropdownOpen
+                          ? "arrow-drop-up"
+                          : "arrow-drop-down"
+                      }
+                      size={24}
+                      color="#6B7280"
+                    />
+                  </TouchableOpacity>
+
+                  {isCalendarDropdownOpen && (
+                    <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                      {calendars.map((calendar) => (
+                        <TouchableOpacity
+                          key={calendar.id}
+                          onPress={() => {
+                            onCalendarChange(calendar.id);
+                            setIsCalendarDropdownOpen(false);
+                          }}
                           className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
                         >
                           <View
                             className="w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: option.color }}
+                            style={{ backgroundColor: calendar.color }}
                           />
-                          <Text className="text-gray-700">{option.name}</Text>
+                          <Text className="text-gray-700">{calendar.name}</Text>
                         </TouchableOpacity>
                       ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
+                    </View>
+                  )}
+                </View>
 
+                {/* Date */}
+                <Text className="text-gray-600 mb-2">Date</Text>
+                <View className="flex-col border border-gray-200 rounded-lg mb-4">
+                  {/* Day */}
+                  <View className="border-b border-gray-200 flex-row items-center justify-between px-2 py-1">
+                    <View className="flex-row items-center">
+                      <MaterialIcons
+                        name="date-range"
+                        size={24}
+                        color="#6B7280"
+                      />
+                      <Text className="pl-2 text-gray-600">Date</Text>
+                    </View>
+                    <DateTimePicker
+                      className="flex-1"
+                      mode="date"
+                      value={startTime}
+                    />
+                  </View>
+
+                  {/* Start Time */}
+                  <View className="border-b border-gray-200 flex-row items-center justify-between px-2 py-1">
+                    <View className="flex-row items-center">
+                      <MaterialIcons
+                        name="access-time"
+                        size={24}
+                        color="#6B7280"
+                      />
+                      <Text className="pl-2 text-gray-600">Start Time</Text>
+                    </View>
+                    <DateTimePicker
+                      mode="time"
+                      is24Hour={true}
+                      value={startTime}
+                      onChange={handleStartTimeChange}
+                    />
+                  </View>
+
+                  {/* End Time */}
+                  <View className="flex-row items-center justify-between px-2 py-1">
+                    <View className="flex-row items-center">
+                      <MaterialIcons
+                        name="access-time"
+                        size={24}
+                        color="#6B7280"
+                      />
+                      <Text className="pl-2 text-gray-600">End Time</Text>
+                    </View>
+                    <DateTimePicker
+                      mode="time"
+                      is24Hour={true}
+                      value={endTime}
+                      onChange={handleEndTimeChange}
+                    />
+                  </View>
+                </View>
+
+                {/* Color Selection */}
+                <View className="mb-4 relative">
+                  <Text className="text-gray-600 mb-2">Color</Text>
+                  <TouchableOpacity
+                    onPress={() => setIsColorDropdownOpen(!isColorDropdownOpen)}
+                    className="flex-row items-center justify-between border border-gray-200 rounded-lg p-3 bg-white"
+                  >
+                    <View className="flex-row items-center">
+                      <View
+                        className="w-4 h-4 rounded-full mr-2"
+                        style={{ backgroundColor: color }}
+                      />
+                      <Text className="text-gray-700">{selectedColorName}</Text>
+                    </View>
+                    <MaterialIcons
+                      name={
+                        isColorDropdownOpen
+                          ? "arrow-drop-up"
+                          : "arrow-drop-down"
+                      }
+                      size={24}
+                      color="#6B7280"
+                    />
+                  </TouchableOpacity>
+
+                  {isColorDropdownOpen && (
+                    <View className="absolute top-full left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg z-50">
+                      <ScrollView className="max-h-[200px]">
+                        {colorOptions.map((option) => (
+                          <TouchableOpacity
+                            key={option.name}
+                            onPress={() =>
+                              handleColorSelect(option.name, option.color)
+                            }
+                            className="flex-row items-center p-3 border-b border-gray-100 last:border-b-0"
+                          >
+                            <View
+                              className="w-4 h-4 rounded-full mr-2"
+                              style={{ backgroundColor: option.color }}
+                            />
+                            <Text className="text-gray-700">{option.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
               {/* Save/Cancel Buttons */}
               <View className="flex-row justify-between mt-4">
                 <TouchableOpacity className="rounded-lg bg-gray-500 px-4 py-2 mr-2">

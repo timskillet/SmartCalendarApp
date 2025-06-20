@@ -10,6 +10,7 @@ export default function TabLayout() {
         headerShown: false,
       }}
     >
+      <Tabs.Screen name="board" options={{ title: "Board" }} />
       <Tabs.Screen
         name="index"
         options={{

@@ -5,10 +5,12 @@ import { useCalendarEntries } from "@/context/CalendarEntryProvider";
 import { useCalendar } from "@/context/CalendarProvider";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Modal,
   RefreshControl,
@@ -18,6 +20,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 type EventIcon = "check-circle" | "edit" | "directions-run";
 
@@ -153,6 +166,19 @@ const fakeEvents: Array<{
   },
 ];
 
+interface DraggedTask {
+  id: string;
+  title: string;
+  type: string;
+  startTime: string;
+  endTime: string;
+  completed: boolean;
+  color: string;
+  originalSection: "today" | "unscheduled";
+}
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+
 const dashboard = () => {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams();
@@ -160,6 +186,16 @@ const dashboard = () => {
   const [isCalendarModalVisible, setIsCalendarModalVisible] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [draggedTask, setDraggedTask] = useState<DraggedTask | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dropZones, setDropZones] = useState({
+    today: { y: 0, height: 0 },
+    unscheduled: { y: 0, height: 0 },
+  });
+
+  const todaySectionRef = useRef<View>(null);
+  const unscheduledSectionRef = useRef<View>(null);
+
   const {
     entries: tasks,
     isLoading: isLoadingTasks,
@@ -172,6 +208,19 @@ const dashboard = () => {
   } = useCalendarEntries();
 
   const calendarTasks = getEntriesForCalendar(selectedCalendar?.id || "");
+
+  // Separate tasks into today's agenda and unscheduled
+  const todaysTasks = calendarTasks.filter((task) => {
+    const taskDate = new Date(task.startTime);
+    const today = new Date();
+    return taskDate.toDateString() === today.toDateString();
+  });
+
+  const unscheduledTasks = calendarTasks.filter((task) => {
+    const taskDate = new Date(task.startTime);
+    const today = new Date();
+    return taskDate.toDateString() !== today.toDateString();
+  });
 
   useEffect(() => {
     // If no calendar is selected, select the primary calendar
@@ -249,196 +298,375 @@ const dashboard = () => {
     }
   }, [selectedCalendar?.id, refreshEntries, calendarTasks]);
 
-  return (
-    <SafeAreaView className="flex-1">
-      <View className="flex-1 px-4">
-        <View className="flex-row justify-between items-center">
+  const moveTaskToToday = (taskId: string) => {
+    // Update the task's start time to today
+    const today = new Date();
+    const task = calendarTasks.find((t) => t.id === taskId);
+    if (task) {
+      const newStartTime = new Date(today);
+      newStartTime.setHours(9, 0, 0, 0); // Set to 9 AM
+
+      // Update the task in the database
+      // This would require an API call to update the task
+      console.log(`Moving task ${taskId} to today at ${newStartTime}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const moveTaskToUnscheduled = (taskId: string) => {
+    // Update the task's start time to a future date
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 7); // Move to next week
+    const task = calendarTasks.find((t) => t.id === taskId);
+    if (task) {
+      const newStartTime = new Date(futureDate);
+      newStartTime.setHours(9, 0, 0, 0); // Set to 9 AM
+
+      // Update the task in the database
+      // This would require an API call to update the task
+      console.log(`Moving task ${taskId} to unscheduled at ${newStartTime}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const TaskItem = ({
+    task,
+    section,
+  }: {
+    task: any;
+    section: "today" | "unscheduled";
+  }) => {
+    const translateX = useSharedValue(0);
+    const translateY = useSharedValue(0);
+    const scale = useSharedValue(1);
+    const zIndex = useSharedValue(0);
+
+    const animatedStyle = useAnimatedStyle(() => {
+      return {
+        transform: [
+          { translateX: translateX.value },
+          { translateY: translateY.value },
+          { scale: scale.value },
+        ],
+        zIndex: zIndex.value,
+      };
+    });
+
+    const dragGesture = Gesture.Pan()
+      .onStart((event) => {
+        runOnJS(setIsDragging)(true);
+        runOnJS(setDraggedTask)({
+          ...task,
+          originalSection: section,
+        });
+        scale.value = withSpring(1.05);
+        zIndex.value = 1000;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      })
+      .onUpdate((event) => {
+        translateX.value = event.translationX;
+        translateY.value = event.translationY;
+      })
+      .onEnd((event) => {
+        runOnJS(setIsDragging)(false);
+        scale.value = withSpring(1);
+        zIndex.value = 0;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+
+        // Get drop zones
+        todaySectionRef.current?.measureInWindow((x, y, width, height) => {
+          unscheduledSectionRef.current?.measureInWindow((ux, uy, uw, uh) => {
+            const dropY = event.absoluteY;
+
+            if (draggedTask) {
+              if (
+                dropY >= y &&
+                dropY <= y + height &&
+                draggedTask.originalSection === "unscheduled"
+              ) {
+                // Drop in today section
+                runOnJS(moveTaskToToday)(draggedTask.id);
+              } else if (
+                dropY >= uy &&
+                dropY <= uy + uh &&
+                draggedTask.originalSection === "today"
+              ) {
+                // Drop in unscheduled section
+                runOnJS(moveTaskToUnscheduled)(draggedTask.id);
+              }
+              runOnJS(setDraggedTask)(null);
+            }
+          });
+        });
+      })
+      .runOnJS(true);
+
+    return (
+      <GestureDetector gesture={dragGesture}>
+        <Animated.View style={animatedStyle}>
           <TouchableOpacity
-            onPress={() => setIsCalendarModalVisible(true)}
-            className="flex-row items-center"
+            className="flex-row items-center mb-2 px-2 py-3 rounded-2xl"
+            style={{ backgroundColor: `${task.color}20` }}
           >
-            <Text className="text-2xl font-bold mr-2">
-              {selectedCalendar?.name || "Select Calendar"}
+            <View className="mr-3">
+              <MaterialIcons
+                name={
+                  task.completed
+                    ? "check-box"
+                    : task.type === "event"
+                    ? "event"
+                    : task.type === "task"
+                    ? "check-circle"
+                    : task.type === "habit"
+                    ? "repeat"
+                    : "emoji-events"
+                }
+                size={24}
+                color={task.completed ? "#6366f1" : task.color}
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-semibold text-gray-900">
+                {task.title}
+              </Text>
+              <Text className="text-sm text-gray-500">
+                {task.type.charAt(0).toUpperCase() + task.type.slice(1)}
+              </Text>
+            </View>
+            <Text className="text-gray-700 text-base font-medium">
+              {new Date(task.startTime).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              {task.endTime && " - "}
+              {task.endTime &&
+                new Date(task.endTime).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
             </Text>
-            <MaterialIcons name="arrow-drop-down" size={24} color="black" />
           </TouchableOpacity>
-          <View className="flex-row gap-5">
-            <TouchableOpacity onPress={() => setIsShareModalVisible(true)}>
-              <MaterialIcons name="send" size={24} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity>
-              <MaterialIcons name="notifications" size={24} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity>
-              <MaterialIcons name="settings" size={24} color="black" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        </Animated.View>
+      </GestureDetector>
+    );
+  };
 
-        <Modal
-          visible={isCalendarModalVisible}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setIsCalendarModalVisible(false)}
-        >
-          <View className="flex-1 bg-black/50">
-            <View className="bg-white mt-20 mx-4 rounded-xl">
-              <View className="p-4 border-b border-gray-200">
-                <Text className="text-xl font-bold">Select Calendar</Text>
-              </View>
-              {calendars.length === 0 ? (
-                <View className="p-4">
-                  <Text className="text-gray-500 text-center">
-                    No calendars available
-                  </Text>
-                </View>
-              ) : (
-                <FlatList
-                  data={calendars as Array<Calendar>}
-                  renderItem={renderCalendarItem}
-                  keyExtractor={(item) => item.id}
-                />
-              )}
-              <TouchableOpacity
-                onPress={() => setIsCalendarModalVisible(false)}
-                className="p-4 border-t border-gray-200"
-              >
-                <Text className="text-center text-blue-500 font-semibold">
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          className="flex-1"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={["#3B82F6"]}
-              tintColor="#3B82F6"
-              title="Refreshing tasks..."
-              titleColor="#6B7280"
-            />
-          }
-        >
-          {/* Today Section */}
-          <View className="flex-1 mt-4">
-            <Text className="text-2xl font-bold mb-2">Today's Agenda</Text>
-            <View className="mb-4">
-              {isLoadingTasks ? (
-                <View className="flex-row justify-center items-center py-4">
-                  <ActivityIndicator size="small" color="#3B82F6" />
-                  <Text className="ml-2 text-gray-600">Loading tasks...</Text>
-                </View>
-              ) : calendarTasks.length > 0 ? (
-                calendarTasks.map((task) => (
-                  <TouchableOpacity
-                    key={task.id}
-                    className="flex-row items-center mb-2 px-2 py-3 rounded-2xl"
-                    style={{ backgroundColor: `${task.color}20` }} // 20 is for 12% opacity
-                  >
-                    <View className="mr-3">
-                      <MaterialIcons
-                        name={
-                          task.completed
-                            ? "check-box"
-                            : task.type === "event"
-                            ? "event"
-                            : task.type === "task"
-                            ? "check-circle"
-                            : task.type === "habit"
-                            ? "repeat"
-                            : "emoji-events"
-                        }
-                        size={24}
-                        color={task.completed ? "#6366f1" : task.color}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-base font-semibold text-gray-900">
-                        {task.title}
-                      </Text>
-                      <Text className="text-sm text-gray-500">
-                        {task.type.charAt(0).toUpperCase() + task.type.slice(1)}
-                      </Text>
-                    </View>
-                    <Text className="text-gray-700 text-base font-medium">
-                      {new Date(task.startTime).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                      {task.endTime && " - "}
-                      {task.endTime &&
-                        new Date(task.endTime).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                    </Text>
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <View className="flex-row justify-center items-center py-4">
-                  <MaterialIcons name="event-busy" size={24} color="#9CA3AF" />
-                  <Text className="ml-2 text-gray-500">No tasks for today</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                className="bg-gray-100 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
-                onPress={() => router.push("/scheduler")}
-              >
-                <View className="mr-3">
-                  <MaterialIcons name="add" size={24} color="#6B7280" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-gray-900">
-                    Add new task
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Goals */}
-          <View className="flex-1 mt-4">
-            <Text className="text-2xl font-bold mb-2">Goals</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="flex-1"
+  return (
+    <GestureHandlerRootView className="flex-1">
+      <SafeAreaView className="flex-1">
+        <View className="flex-1 px-4">
+          <View className="flex-row justify-between items-center">
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setIsCalendarModalVisible(true);
+              }}
+              className="flex-row items-center"
             >
-              <View className="flex-row">
-                {fakeGoals.map((goal, idx) => (
-                  <TouchableOpacity key={idx} className="mr-1">
-                    <GoalCard goal={goal} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
+              <Text className="text-2xl font-bold mr-1">
+                {selectedCalendar?.name || "Select Calendar"}
+              </Text>
+              <MaterialIcons name="arrow-drop-down" size={24} color="black" />
+            </TouchableOpacity>
+            <View className="flex-row gap-5">
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setIsShareModalVisible(true);
+                }}
+              >
+                <MaterialIcons name="send" size={24} color="black" />
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <MaterialIcons name="notifications" size={24} color="black" />
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <MaterialIcons name="settings" size={24} color="black" />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Habits */}
-          <View className="flex-1 mt-4">
-            <Text className="text-2xl font-bold mb-2">Habits</Text>
-            <ScrollView className="flex-1">
+          <Modal
+            visible={isCalendarModalVisible}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setIsCalendarModalVisible(false)}
+          >
+            <View className="flex-1 bg-black/50">
+              <View className="bg-white mt-20 mx-4 rounded-xl">
+                <View className="p-4 border-b border-gray-200">
+                  <Text className="text-xl font-bold">Select Calendar</Text>
+                </View>
+                {calendars.length === 0 ? (
+                  <View className="p-4">
+                    <Text className="text-gray-500 text-center">
+                      No calendars available
+                    </Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={calendars as Array<Calendar>}
+                    renderItem={renderCalendarItem}
+                    keyExtractor={(item) => item.id}
+                  />
+                )}
+                <TouchableOpacity
+                  onPress={() => setIsCalendarModalVisible(false)}
+                  className="p-4 border-t border-gray-200"
+                >
+                  <Text className="text-center text-blue-500 font-semibold">
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            className="flex-1"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={["#3B82F6"]}
+                tintColor="#3B82F6"
+                title="Refreshing tasks..."
+                titleColor="#6B7280"
+              />
+            }
+          >
+            {/* Today's Agenda */}
+            <View ref={todaySectionRef} className="flex-1 mt-4">
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="text-2xl font-bold">Today's Agenda</Text>
+                {isDragging &&
+                  draggedTask?.originalSection === "unscheduled" && (
+                    <Text className="text-sm text-blue-500">
+                      Drop here to schedule
+                    </Text>
+                  )}
+              </View>
+              <View className="mb-4">
+                {isLoadingTasks ? (
+                  <View className="flex-row justify-center items-center py-4">
+                    <ActivityIndicator size="small" color="#3B82F6" />
+                    <Text className="ml-2 text-gray-600">Loading tasks...</Text>
+                  </View>
+                ) : todaysTasks.length > 0 ? (
+                  todaysTasks.map((task) => (
+                    <TaskItem key={task.id} task={task} section="today" />
+                  ))
+                ) : (
+                  <View className="flex-row justify-center items-center py-4">
+                    <MaterialIcons
+                      name="event-busy"
+                      size={24}
+                      color="#9CA3AF"
+                    />
+                    <Text className="ml-2 text-gray-500">
+                      No tasks for today
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  className="bg-gray-100 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
+                  onPress={() => router.push("/scheduler")}
+                >
+                  <View className="mr-3">
+                    <MaterialIcons name="add" size={24} color="#6B7280" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-base font-semibold text-gray-900">
+                      Add new task
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Unscheduled Tasks */}
+            <View ref={unscheduledSectionRef} className="flex-1 mt-4">
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="text-2xl font-bold">Unscheduled Tasks</Text>
+                {isDragging && draggedTask?.originalSection === "today" && (
+                  <Text className="text-sm text-orange-500">
+                    Drop here to unschedule
+                  </Text>
+                )}
+              </View>
               <View className="mt-4">
-                <View className="flex-row"></View>
+                {unscheduledTasks.length > 0 ? (
+                  unscheduledTasks.map((task) => (
+                    <TaskItem key={task.id} task={task} section="unscheduled" />
+                  ))
+                ) : (
+                  <View className="flex-row justify-center items-center py-4">
+                    <MaterialIcons
+                      name="event-busy"
+                      size={24}
+                      color="#9CA3AF"
+                    />
+                    <Text className="ml-2 text-gray-500">
+                      No unscheduled tasks
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  className="bg-gray-100 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
+                  onPress={() => router.push("/scheduler")}
+                >
+                  <View className="mr-3">
+                    <MaterialIcons name="add" size={24} color="#6B7280" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-base font-semibold text-gray-900">
+                      Add new task
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-          </View>
-        </ScrollView>
+            </View>
 
-        <ShareCalendarModal
-          isVisible={isShareModalVisible}
-          onClose={() => setIsShareModalVisible(false)}
-          calendarId={selectedCalendar?.id || ""}
-          calendarName={selectedCalendar?.name || "Calendar"}
-        />
-      </View>
-    </SafeAreaView>
+            {/* Goals */}
+            <View className="flex-1 mt-4">
+              <Text className="text-2xl font-bold mb-2">Goals</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="flex-1"
+              >
+                <View className="flex-row">
+                  {fakeGoals.map((goal, idx) => (
+                    <TouchableOpacity key={idx} className="mr-1">
+                      <GoalCard goal={goal} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+
+            {/* Habits */}
+            <View className="flex-1 mt-4">
+              <Text className="text-2xl font-bold mb-2">Habits</Text>
+              <ScrollView className="flex-1">
+                <View className="mt-4">
+                  <View className="flex-row"></View>
+                </View>
+              </ScrollView>
+            </View>
+          </ScrollView>
+
+          <ShareCalendarModal
+            isVisible={isShareModalVisible}
+            onClose={() => setIsShareModalVisible(false)}
+            calendarId={selectedCalendar?.id || ""}
+            calendarName={selectedCalendar?.name || "Calendar"}
+          />
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 };
 
