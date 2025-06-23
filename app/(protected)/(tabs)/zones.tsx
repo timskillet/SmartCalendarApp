@@ -159,8 +159,7 @@ const board = () => {
     });
 
     const dragGesture = Gesture.Pan()
-      .minDistance(0)
-      .onBegin(() => {
+      .onStart(() => {
         runOnJS(setIsDragging)(true);
         runOnJS(setDraggedTask)(task);
         runOnJS(setDraggedFromSection)(section);

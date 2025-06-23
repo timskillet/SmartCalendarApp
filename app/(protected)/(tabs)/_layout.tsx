@@ -10,7 +10,6 @@ export default function TabLayout() {
         headerShown: false,
       }}
     >
-      <Tabs.Screen name="board" options={{ title: "Board" }} />
       <Tabs.Screen
         name="index"
         options={{
@@ -21,9 +20,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="scheduler"
+        name="calendar"
         options={{
-          title: "Scheduler",
+          title: "Calendar",
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="schedule-send" color={color} size={size} />
           ),

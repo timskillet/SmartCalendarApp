@@ -572,7 +572,7 @@ const dashboard = () => {
                 )}
                 <TouchableOpacity
                   className="bg-gray-100 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
-                  onPress={() => router.push("/scheduler")}
+                  onPress={() => router.push("../(scheduler)/scheduler")}
                 >
                   <View className="mr-3">
                     <MaterialIcons name="add" size={24} color="#6B7280" />
@@ -615,7 +615,7 @@ const dashboard = () => {
                 )}
                 <TouchableOpacity
                   className="bg-gray-100 flex-row items-center mb-2 px-2 py-3 rounded-2xl"
-                  onPress={() => router.push("/scheduler")}
+                  onPress={() => router.push("../(scheduler)/scheduler")}
                 >
                   <View className="mr-3">
                     <MaterialIcons name="add" size={24} color="#6B7280" />
