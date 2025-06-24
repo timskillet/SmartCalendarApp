@@ -56,6 +56,9 @@ const Board = ({
   const positions = useSharedValue<Record<string, number>>({});
   const isDragging = useSharedValue(false);
   const draggedTaskId = useSharedValue<string | null>(null);
+  const boardScale = useSharedValue(1);
+  const scheduledHovered = useSharedValue(false);
+  const unscheduledHovered = useSharedValue(false);
 
   // Initialize positions when tasks change
   React.useEffect(() => {
@@ -97,9 +100,54 @@ const Board = ({
           { translateX: withSpring(translateX.value) },
           { scale: withSpring(scale.value) },
         ],
-        zIndex: zIndex.value,
+        zIndex: isGestureActive.value ? 2000 : zIndex.value,
       };
     });
+
+    const hoverGesture = Gesture.Pan()
+      .onStart(() => {})
+      .onUpdate((event) => {
+        // Get drop zones and check if task should be moved using measureInWindow
+        scheduledBoardRef.current?.measureInWindow((x, y, width, height) => {
+          unscheduledBoardRef.current?.measureInWindow((ux, uy, uw, uh) => {
+            const dropY = lastTouchY.value;
+            const dropX = lastTouchX.value;
+
+            // Check if dropped in scheduled section
+            if (
+              dropY >= y &&
+              dropY <= y + height &&
+              dropX >= x &&
+              dropX <= x + width
+            ) {
+              if (boardId === "unscheduled") {
+                // Moving from unscheduled to scheduled
+              } else if (boardId === "scheduled") {
+                // Reordering within scheduled section
+              }
+            }
+            // Check if dropped in unscheduled section
+            else if (
+              dropY >= uy &&
+              dropY <= uy + uh &&
+              dropX >= ux &&
+              dropX <= ux + uw
+            ) {
+              if (boardId === "scheduled") {
+                // Moving from scheduled to unscheduled
+              } else if (boardId === "unscheduled") {
+                // Reordering within unscheduled section
+              }
+            }
+          });
+        });
+      })
+      .runOnJS(true)
+      .onEnd(() => {
+        scheduledHovered.value = false;
+        unscheduledHovered.value = false;
+        boardScale.value = 1;
+      });
 
     const dragGesture = Gesture.Pan()
       .onStart(() => {
@@ -236,8 +284,10 @@ const Board = ({
       })
       .runOnJS(true);
 
+    const composedGesture = Gesture.Simultaneous(hoverGesture, dragGesture);
+
     return (
-      <GestureDetector gesture={dragGesture}>
+      <GestureDetector gesture={composedGesture}>
         <Animated.View style={animatedStyle}>
           <View className="bg-gray-200 rounded-lg p-4 m-2 border border-black">
             <View className="flex-row justify-between items-center">
@@ -257,9 +307,47 @@ const Board = ({
     );
   };
 
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: boardScale.value }],
+      borderColor:
+        scheduledHovered.value || unscheduledHovered.value
+          ? "#3b82f6"
+          : "#000000",
+      backgroundColor:
+        scheduledHovered.value || unscheduledHovered.value
+          ? "#eff6ff"
+          : "#ffffff",
+    };
+  });
+
+  const titleAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      color:
+        scheduledHovered.value || unscheduledHovered.value
+          ? "#2563eb"
+          : "#000000",
+    };
+  });
+
   return (
-    <View ref={ref} className="flex-1 border border-black rounded-lg m-4 p-4">
-      <Text className="text-2xl font-bold mb-4">{title}</Text>
+    <Animated.View
+      ref={ref}
+      className="flex-1 border rounded-lg m-4 p-4"
+      style={[
+        animatedStyle,
+        {
+          position: "relative",
+          minHeight: Math.max(tasks.length * (ItemHeight + MarginBottom), 200),
+        },
+      ]}
+    >
+      <Animated.Text
+        className="text-2xl font-bold mb-4"
+        style={titleAnimatedStyle}
+      >
+        {title}
+      </Animated.Text>
       <View
         style={{
           minHeight: Math.max(tasks.length * (ItemHeight + MarginBottom), 200),
@@ -270,7 +358,7 @@ const Board = ({
           <BoardItem key={task.id} task={task} index={index} />
         ))}
       </View>
-    </View>
+    </Animated.View>
   );
 };
 

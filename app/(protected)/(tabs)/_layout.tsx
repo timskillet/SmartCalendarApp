@@ -24,7 +24,7 @@ export default function TabLayout() {
         options={{
           title: "Calendar",
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="schedule-send" color={color} size={size} />
+            <MaterialIcons name="calendar-month" color={color} size={size} />
           ),
         }}
       />
@@ -52,6 +52,15 @@ export default function TabLayout() {
           title: "Profile",
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="person" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="auto_scheduler"
+        options={{
+          title: "Scheduler",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="schedule-send" color={color} size={size} />
           ),
         }}
       />
